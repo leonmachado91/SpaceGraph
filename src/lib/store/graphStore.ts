@@ -41,6 +41,7 @@ interface GraphState {
 
     // === Estado de Interação ===
     selectedNodeIds: Set<string>;
+    selectedEdgeId: string | null;
     isDragging: boolean;
 
     // === Busca (Spotlight) ===
@@ -98,8 +99,10 @@ interface GraphActions {
     toggleGrid: () => void;
 
     // === Interaction State ===
+    // === Interaction State ===
     setSelectedNodeIds: (ids: Set<string>) => void;
     selectNode: (id: string, additive?: boolean) => void;
+    selectEdge: (id: string | null) => void;
     clearSelection: () => void;
     setIsDragging: (dragging: boolean) => void;
 
@@ -135,6 +138,7 @@ const initialState: Omit<GraphState, 'selectedNodeIds'> & { selectedNodeIds: Set
     showGrid: true,
 
     selectedNodeIds: new Set(),
+    selectedEdgeId: null,
     isDragging: false,
 
     // Busca
@@ -491,6 +495,8 @@ export const useGraphStore = create<GraphStore>()(
 
             selectNode: (id, additive = false) => {
                 set((state) => {
+                    const updates: Partial<GraphState> = { selectedEdgeId: null }; // Sempre limpa edge ao selecionar node
+
                     if (additive) {
                         const newSelection = new Set(state.selectedNodeIds);
                         if (newSelection.has(id)) {
@@ -498,13 +504,22 @@ export const useGraphStore = create<GraphStore>()(
                         } else {
                             newSelection.add(id);
                         }
-                        return { selectedNodeIds: newSelection };
+                        updates.selectedNodeIds = newSelection;
+                    } else {
+                        updates.selectedNodeIds = new Set([id]);
                     }
-                    return { selectedNodeIds: new Set([id]) };
+                    return updates;
                 });
             },
 
-            clearSelection: () => set({ selectedNodeIds: new Set() }),
+            selectEdge: (id) => {
+                set({
+                    selectedEdgeId: id,
+                    selectedNodeIds: new Set(), // Sempre limpa nodes ao selecionar edge
+                });
+            },
+
+            clearSelection: () => set({ selectedNodeIds: new Set(), selectedEdgeId: null }),
 
             setIsDragging: (dragging) => set({ isDragging: dragging }),
 

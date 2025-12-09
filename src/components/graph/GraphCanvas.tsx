@@ -19,6 +19,7 @@ import { ConnectionLine } from './ConnectionLine';
 import { CanvasToolbar } from './CanvasToolbar';
 import { SettingsPanel } from './SettingsPanel';
 import { PropertySidebar } from './PropertySidebar';
+import { EdgeSidebar } from './EdgeSidebar';
 import { TagManager } from '../tags/TagManager';
 import { useGraphStore, useNodes, useEdges, useShowGrid } from '@/lib/store/graphStore';
 import { useD3Simulation } from '@/lib/hooks/useD3Simulation';
@@ -66,7 +67,9 @@ function GraphCanvasContent() {
         currentSystemId,
         selectNode,
         clearSelection,
-        setSelectedNodeIds
+        selectEdge,
+        setSelectedNodeIds,
+        selectedEdgeId
     } = useGraphStore();
 
     // Derived Selection State (Derived from Store)
@@ -383,7 +386,15 @@ function GraphCanvasContent() {
                 />
             )}
 
-            {/* Painel de propriedades da edge - AINDA NÃO SUPORTA SELEÇÃO MÚLTIPLA DE EDGE OU SINGLE EDGE GLOBAL */}
+            {/* Painel de propriedades da edge */}
+            {selectedEdgeId && !selectedNodeId && (
+                <EdgeSidebar
+                    key={selectedEdgeId}
+                    edgeId={selectedEdgeId}
+                    onClose={() => selectEdge(null)}
+                    onSelectNode={(id) => selectNode(id)}
+                />
+            )}
 
             <ReactFlow
                 defaultNodes={rfNodes}
@@ -401,8 +412,7 @@ function GraphCanvasContent() {
                     selectNode(node.id, false);
                 }}
                 onEdgeClick={(_event, edge) => {
-                    // TODO: Implementar seleção de edge na store se necessário
-                    console.log('Edge selecionada:', edge.id);
+                    selectEdge(edge.id);
                 }}
                 onPaneClick={() => {
                     clearSelection();

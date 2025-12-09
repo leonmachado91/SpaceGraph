@@ -3,7 +3,7 @@
 import { memo, useState, useMemo } from 'react';
 import { Handle, Position, Node, NodeProps, useViewport, useReactFlow } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { NODE, ZOOM } from '@/lib/constants';
+import { NODE, ZOOM, PHYSICS } from '@/lib/constants';
 import { useGraphStore } from '@/lib/store/graphStore';
 
 // ============================================================================
@@ -61,7 +61,14 @@ export const NODE_RADIUS = NODE.RADIUS;
 function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
     const { zoom } = useViewport();
     const lod = useMemo(() => getLODLevel(zoom), [zoom]);
-    const { nodes, edges } = useGraphStore.getState();
+    // Apenas nodes (para quick add), edges via seletor
+    // const { nodes } = useGraphStore.getState(); // Removido pois usamos getState direto no handler
+    const storeEdges = useGraphStore((s) => s.edges); // Reativo
+
+    const degree = useMemo(() => {
+        return storeEdges.filter(e => e.source === id || e.target === id).length;
+    }, [storeEdges, id]);
+
     const reactFlow = useReactFlow();
 
     // Estado local para hover (para performance)
@@ -93,8 +100,12 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
     // Tags ficam na parte inferior: 210°, 240°, 270°, 300°, 330° (evitando 180° e 0°)
     const tagAngles = [225, 270, 315, 135]; // Posições para até 4 tags
 
-    // Nós mantêm mesmo tamanho em todos os LODs
-    const nodeSize = NODE_RADIUS * 2;
+    // Tamanho Dinâmico
+    // Base: 70px (35 * 2)
+    const baseSize = NODE_RADIUS * 2;
+    const growthFactor = PHYSICS.DENSITY_GENERIC_FACTOR;
+    const dynamicSize = Math.min(baseSize + (degree * growthFactor), PHYSICS.DENSITY_MAX_SIZE);
+    const currentRadius = dynamicSize / 2;
 
     return (
         <div
@@ -104,7 +115,7 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
                 selected ? "z-50" : "z-10",
                 isDimmed && "opacity-20 pointer-events-none"
             )}
-            style={{ width: nodeSize, height: nodeSize }}
+            style={{ width: dynamicSize, height: dynamicSize }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => {
                 setIsHovered(false);
@@ -147,7 +158,9 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
                     onClick={(e) => {
                         e.stopPropagation();
                         // Quick Add: cria nó filho a +150px à direita
-                        const currentNode = nodes.find(n => n.id === id);
+                        // Busca estado atualizado diretamente da store para garantir consistência
+                        const { nodes: currentNodes, edges: currentEdges } = useGraphStore.getState();
+                        const currentNode = currentNodes.find(n => n.id === id);
                         if (!currentNode) return;
 
                         const newNodeId = crypto.randomUUID();
@@ -169,8 +182,8 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
 
                         // Atualiza Store
                         useGraphStore.setState({
-                            nodes: [...nodes, newNode],
-                            edges: [...edges, newEdge],
+                            nodes: [...currentNodes, newNode],
+                            edges: [...currentEdges, newEdge],
                         });
 
                         // Atualiza React Flow para que a física pegue o novo nó
@@ -181,7 +194,7 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
                             type: 'orb',
                         });
 
-                        // Adiciona edge no RF também para visualização imediata (embora simulator recriaria links)
+                        // Adiciona edge no RF também para visualização imediata
                         reactFlow.addEdges({
                             id: newEdge.id,
                             source: newEdge.source,
@@ -221,7 +234,7 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
 
                 {/* Tags: Bolinhas na circunferência (parte inferior) */}
                 {nodeTags.length > 0 && nodeTags.map((tag, index) => {
-                    const pos = getPositionOnCircle(tagAngles[index] || 270, NODE_RADIUS + 4);
+                    const pos = getPositionOnCircle(tagAngles[index] || 270, currentRadius + 4);
                     const isTagHovered = hoveredTagIndex === index;
 
                     return (

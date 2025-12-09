@@ -11,6 +11,7 @@ import {
     SimulationLinkDatum,
 } from 'd3-force';
 import { GraphNode, GraphEdge } from '@/types/graph';
+import { PHYSICS } from '@/lib/constants';
 
 // ============================================================================
 // D3 SIMULATION MANAGER - Gerenciador de Física do Grafo
@@ -35,6 +36,7 @@ export interface SimNode extends SimulationNodeDatum {
     y: number;
     fx?: number | null;
     fy?: number | null;
+    degree: number;
 }
 
 export interface SimLink extends SimulationLinkDatum<SimNode> {
@@ -53,16 +55,20 @@ export type OnEndCallback = () => void;
 // === Constantes ===
 
 const DEFAULT_CONFIG: SimulationConfig = {
-    repulsionStrength: -300,
-    linkDistance: 150,
-    collisionRadius: 40,
+    repulsionStrength: PHYSICS.REPULSION_DEFAULT,
+    linkDistance: PHYSICS.LINK_DISTANCE_DEFAULT,
+    collisionRadius: PHYSICS.COLLISION_RADIUS_DEFAULT,
 };
 
-const ALPHA_DECAY = 0.02;
-const VELOCITY_DECAY = 0.2;
-const ALPHA_MIN = 0.001;
-const CENTER_STRENGTH = 0.02;
-const AXIS_STRENGTH = 0.008;
+const ALPHA_DECAY = PHYSICS.ALPHA_DECAY;
+const VELOCITY_DECAY = PHYSICS.VELOCITY_DECAY;
+const ALPHA_MIN = PHYSICS.ALPHA_MIN;
+const CENTER_STRENGTH = PHYSICS.CENTER_STRENGTH;
+const AXIS_STRENGTH = PHYSICS.AXIS_STRENGTH;
+
+// Fatores de Densidade
+const DEGREE_CHARGE_FACTOR = PHYSICS.DENSITY_CHARGE_FACTOR;
+const DEGREE_SIZE_FACTOR = PHYSICS.DENSITY_GENERIC_FACTOR;
 
 // === Classe Principal ===
 
@@ -146,6 +152,13 @@ class D3SimulationManager {
         // Atualiza configuração
         this.config = { ...DEFAULT_CONFIG, ...config };
 
+        // Calcula graus (degrees)
+        const degrees = new Map<string, number>();
+        edges.forEach(edge => {
+            degrees.set(edge.source, (degrees.get(edge.source) || 0) + 1);
+            degrees.set(edge.target, (degrees.get(edge.target) || 0) + 1);
+        });
+
         // Cria nós para a simulação, preservando posições existentes se houver
         this.nodes = nodes.map(node => {
             const existing = this.nodes.find(n => n.id === node.id);
@@ -156,6 +169,7 @@ class D3SimulationManager {
                 y: existing?.y ?? node.y,
                 vx: existing?.vx ?? 0,
                 vy: existing?.vy ?? 0,
+                degree: degrees.get(node.id) || 0,
             };
         });
 
@@ -166,9 +180,17 @@ class D3SimulationManager {
             target: edge.target,
         }));
 
+        // Helper para raio de colisão dinâmico
+        const getCollisionRadius = (d: SimNode) => {
+            const contentRadius = Math.max(this.config.collisionRadius, (d.label?.length ?? 5) * 4 + 25);
+            return contentRadius + (d.degree * DEGREE_SIZE_FACTOR);
+        };
+
         // Cria a simulação D3
         this.simulation = forceSimulation<SimNode>(this.nodes)
-            .force('charge', forceManyBody<SimNode>().strength(this.config.repulsionStrength))
+            .force('charge', forceManyBody<SimNode>()
+                .strength(d => this.config.repulsionStrength * (1 + d.degree * DEGREE_CHARGE_FACTOR))
+            )
             .force('link', forceLink<SimNode, SimLink>(this.links)
                 .id(d => d.id)
                 .distance(this.getLinkDistance.bind(this))
@@ -178,7 +200,7 @@ class D3SimulationManager {
             .force('x', forceX(0).strength(AXIS_STRENGTH))
             .force('y', forceY(0).strength(AXIS_STRENGTH))
             .force('collide', forceCollide<SimNode>()
-                .radius(d => Math.max(this.config.collisionRadius, (d.label?.length ?? 5) * 4 + 25))
+                .radius(getCollisionRadius)
                 .iterations(2)
             )
             .alphaDecay(ALPHA_DECAY)
@@ -300,6 +322,7 @@ class D3SimulationManager {
             y,
             vx: 0,
             vy: 0,
+            degree: 0, // Novo nó começa sem conexões na simulação
         });
 
         if (this.simulation && this.isRunning()) {
@@ -345,12 +368,16 @@ class D3SimulationManager {
             // Atualiza forças com nova configuração
             const charge = this.simulation.force('charge') as ReturnType<typeof forceManyBody>;
             if (charge && config.repulsionStrength !== undefined) {
-                charge.strength(config.repulsionStrength);
+                charge.strength(d => config.repulsionStrength! * (1 + (d as SimNode).degree * DEGREE_CHARGE_FACTOR));
             }
 
             const collide = this.simulation.force('collide') as ReturnType<typeof forceCollide>;
             if (collide && config.collisionRadius !== undefined) {
-                collide.radius(d => Math.max(config.collisionRadius!, ((d as SimNode).label?.length ?? 5) * 4 + 25));
+                collide.radius(d => {
+                    const simNode = d as SimNode;
+                    const contentRadius = Math.max(config.collisionRadius!, (simNode.label?.length ?? 5) * 4 + 25);
+                    return contentRadius + (simNode.degree * DEGREE_SIZE_FACTOR);
+                });
             }
 
             // Reaquece para aplicar mudanças
@@ -379,11 +406,23 @@ class D3SimulationManager {
     }
 
     private getLinkDistance(link: SimLink): number {
-        const sourceNode = typeof link.source === 'object' ? link.source : null;
-        const targetNode = typeof link.target === 'object' ? link.target : null;
-        const sourceLabel = sourceNode?.label?.length ?? 5;
-        const targetLabel = targetNode?.label?.length ?? 5;
-        return this.config.linkDistance + (sourceLabel + targetLabel) * 2;
+        const sourceNode = typeof link.source === 'object' ? link.source : this.nodes.find(n => n.id === link.source);
+        const targetNode = typeof link.target === 'object' ? link.target : this.nodes.find(n => n.id === link.target);
+
+        if (!sourceNode || !targetNode) return this.config.linkDistance;
+
+        // Base collision radius calculation logic (consistent with collide force)
+        const getDynamicRadius = (node: SimNode) => {
+            const contentRadius = Math.max(this.config.collisionRadius, (node.label?.length ?? 5) * 4 + 25);
+            return contentRadius + (node.degree * DEGREE_SIZE_FACTOR);
+        };
+
+        const sourceRadius = getDynamicRadius(sourceNode);
+        const targetRadius = getDynamicRadius(targetNode);
+
+        // A distância do link deve ser a soma dos raios + uma margem base
+        // Link distance is center-to-center
+        return sourceRadius + targetRadius + this.config.linkDistance;
     }
 }
 

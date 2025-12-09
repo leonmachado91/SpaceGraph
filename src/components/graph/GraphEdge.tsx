@@ -1,8 +1,7 @@
-'use client';
-
 import { memo, useMemo } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useStore } from '@xyflow/react';
 import { NODE_RADIUS } from './GraphNode';
+import { PHYSICS } from '@/lib/constants'; // Importar PHYSICS
 import { useGraphStore } from '@/lib/store/graphStore';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +30,14 @@ function getPointOnCircle(
     };
 }
 
+// Helper para calcular raio dinâmico (copiado do GraphNode para consistência)
+function getNodeRadius(degree: number): number {
+    const baseSize = NODE_RADIUS * 2;
+    const growthFactor = PHYSICS.DENSITY_GENERIC_FACTOR;
+    const dynamicSize = Math.min(baseSize + (degree * growthFactor), PHYSICS.DENSITY_MAX_SIZE);
+    return dynamicSize / 2;
+}
+
 function GraphEdgeComponent({
     source,
     target,
@@ -49,6 +56,11 @@ function GraphEdgeComponent({
         };
     });
 
+    // Acesso às edges do store para calcular graus
+    // IMPORTANTE: Isso pode ser pesado se houver muitas edges. 
+    // Em um cenário real de produção com milhares de nós, o "degree" deveria ser uma propriedade do node no store.
+    const allEdges = useGraphStore((s) => s.edges);
+
     // Spotlight Effect
     const searchQuery = useGraphStore((s) => s.searchQuery);
     const highlightedNodeIds = useGraphStore((s) => s.highlightedNodeIds);
@@ -61,11 +73,36 @@ function GraphEdgeComponent({
     const edgeStyle = edgeData?.style || 'solid';
     const label = edgeData?.label;
 
-    // Centro dos nós (posição é o canto superior esquerdo)
-    const sourceCenterX = nodePositions.sourceX + NODE_RADIUS;
-    const sourceCenterY = nodePositions.sourceY + NODE_RADIUS;
-    const targetCenterX = nodePositions.targetX + NODE_RADIUS;
-    const targetCenterY = nodePositions.targetY + NODE_RADIUS;
+    // Calcular graus e raios dinâmicos
+    const { sourceRadius, targetRadius } = useMemo(() => {
+        const sourceDegree = allEdges.filter(e => e.source === source || e.target === source).length;
+        const targetDegree = allEdges.filter(e => e.source === target || e.target === target).length;
+
+        return {
+            sourceRadius: getNodeRadius(sourceDegree),
+            targetRadius: getNodeRadius(targetDegree)
+        };
+    }, [allEdges, source, target]);
+
+    // Centro dos nós
+    // O centro visual não muda (é x + raio dinâmico), mas a posição (x,y) do React Flow é o canto superior esquerdo.
+    // Como o tamanho do nó mudou, o offset para o centro também muda!
+    // GraphNode: style={{ width: dynamicSize, height: dynamicSize }}
+    // A posição (x,y) que o D3/ReactFlow devolve é o canto superior esquerdo do nó *com o tamanho dinâmico*?
+    // NÃO. O D3 simula o centro (normalmente). O `useD3Simulation` atualiza a posição do nó.
+    // Se o nó cresce, ele cresce a partir do centro se o CSS estiver centralizado, 
+    // MAS no React Flow, x/y é top/left.
+    // O GraphNode renderiza baseado em props.x/props.y? 
+    // Vamos assumir que a posição x/y do nó no ReactFlow é o centro menos o raio (se o renderer fizer isso) ou top/left.
+    // D3SimulationManager.ts: node.x/y são centros.
+    // useD3Simulation.ts: `onTick` atualiza nodes do RF.
+    // Geralmente D3 usa centro. Se RF usa top-left, precisamos converter.
+
+    // Se assumirmos que (sourceX, sourceY) é o TopLeft do nó:
+    const sourceCenterX = nodePositions.sourceX + sourceRadius;
+    const sourceCenterY = nodePositions.sourceY + sourceRadius;
+    const targetCenterX = nodePositions.targetX + targetRadius;
+    const targetCenterY = nodePositions.targetY + targetRadius;
 
     // Pontos de conexão
     const { startPoint, endPoint, angle } = useMemo(() => {
@@ -75,8 +112,8 @@ function GraphEdgeComponent({
         );
         const angleToSource = angleToTarget + Math.PI;
 
-        const offsetStart = NODE_RADIUS + 2;
-        const offsetEnd = NODE_RADIUS + 16;
+        const offsetStart = sourceRadius + 2; // +2px gap
+        const offsetEnd = targetRadius + 16;  // +16px gap (arrow)
 
         const start = getPointOnCircle(sourceCenterX, sourceCenterY, offsetStart, angleToTarget);
         const end = getPointOnCircle(targetCenterX, targetCenterY, offsetEnd, angleToSource);
@@ -86,7 +123,7 @@ function GraphEdgeComponent({
             endPoint: end,
             angle: angleToTarget * (180 / Math.PI)
         };
-    }, [sourceCenterX, sourceCenterY, targetCenterX, targetCenterY]);
+    }, [sourceCenterX, sourceCenterY, targetCenterX, targetCenterY, sourceRadius, targetRadius]);
 
     const edgePath = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`;
     const strokeDasharray = edgeStyle === 'dashed' ? '6 4' : undefined;

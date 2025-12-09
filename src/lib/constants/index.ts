@@ -51,13 +51,13 @@ export const PHYSICS = {
     /** Alpha mínimo antes de parar a simulação */
     ALPHA_MIN: 0.001,
     /** Força de atração para o centro */
-    CENTER_STRENGTH: 0.02,
+    CENTER_STRENGTH: 0.05,
     /** Força de atração para os eixos X/Y */
-    AXIS_STRENGTH: 0.008,
+    AXIS_STRENGTH: 0.02,
     /** Força de repulsão padrão entre nós */
     REPULSION_DEFAULT: -300,
     /** Distância padrão de links */
-    LINK_DISTANCE_DEFAULT: 150,
+    LINK_DISTANCE_DEFAULT: 100,
     /** Raio de colisão padrão */
     COLLISION_RADIUS_DEFAULT: 40,
     /** Intervalo mínimo entre ticks (em ms) para throttling */
@@ -66,6 +66,12 @@ export const PHYSICS = {
     PERSIST_DEBOUNCE_MS: 800,
     /** Alpha ao reiniciar simulação após mudança */
     RESTART_ALPHA: 0.3,
+    /** Fator de crescimento visual do raio do nó por conexão */
+    DENSITY_GENERIC_FACTOR: 15,
+    /** Tamanho visual máximo do nó (em pixels) */
+    DENSITY_MAX_SIZE: 800,
+    /** Fator de aumento da força de repulsão por conexão (0.2 = +20%) */
+    DENSITY_CHARGE_FACTOR: 0.2,
 } as const;
 
 // === UI ===
