@@ -3,6 +3,8 @@
 import { memo, useMemo } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useStore } from '@xyflow/react';
 import { NODE_RADIUS } from './GraphNode';
+import { useGraphStore } from '@/lib/store/graphStore';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // GRAPH EDGE - Conexão visual dinâmica entre nós
@@ -35,7 +37,7 @@ function GraphEdgeComponent({
     data,
     selected,
 }: EdgeProps) {
-    // OTIMIZAÇÃO: Selector específico que só atualiza quando source ou target mudam
+    // Selector para posições dos nós
     const nodePositions = useStore((state) => {
         const sourceNode = state.nodeLookup.get(source);
         const targetNode = state.nodeLookup.get(target);
@@ -47,18 +49,25 @@ function GraphEdgeComponent({
         };
     });
 
+    // Spotlight Effect
+    const searchQuery = useGraphStore((s) => s.searchQuery);
+    const highlightedNodeIds = useGraphStore((s) => s.highlightedNodeIds);
+    const isSearching = searchQuery.length > 0;
+    const isConnectedToHighlighted = highlightedNodeIds.includes(source) || highlightedNodeIds.includes(target);
+    const isDimmed = isSearching && !isConnectedToHighlighted;
+
     const edgeData = data as EdgeData | undefined;
     const baseColor = edgeData?.color || '#8b5cf6';
     const edgeStyle = edgeData?.style || 'solid';
     const label = edgeData?.label;
 
-    // Centro dos nós
+    // Centro dos nós (posição é o canto superior esquerdo)
     const sourceCenterX = nodePositions.sourceX + NODE_RADIUS;
     const sourceCenterY = nodePositions.sourceY + NODE_RADIUS;
     const targetCenterX = nodePositions.targetX + NODE_RADIUS;
     const targetCenterY = nodePositions.targetY + NODE_RADIUS;
 
-    // Pontos de conexão na borda dos círculos
+    // Pontos de conexão
     const { startPoint, endPoint, angle } = useMemo(() => {
         const angleToTarget = Math.atan2(
             targetCenterY - sourceCenterY,
@@ -66,8 +75,11 @@ function GraphEdgeComponent({
         );
         const angleToSource = angleToTarget + Math.PI;
 
-        const start = getPointOnCircle(sourceCenterX, sourceCenterY, NODE_RADIUS + 2, angleToTarget);
-        const end = getPointOnCircle(targetCenterX, targetCenterY, NODE_RADIUS + 16, angleToSource);
+        const offsetStart = NODE_RADIUS + 2;
+        const offsetEnd = NODE_RADIUS + 16;
+
+        const start = getPointOnCircle(sourceCenterX, sourceCenterY, offsetStart, angleToTarget);
+        const end = getPointOnCircle(targetCenterX, targetCenterY, offsetEnd, angleToSource);
 
         return {
             startPoint: start,
@@ -77,11 +89,12 @@ function GraphEdgeComponent({
     }, [sourceCenterX, sourceCenterY, targetCenterX, targetCenterY]);
 
     const edgePath = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`;
+    const strokeDasharray = edgeStyle === 'dashed' ? '6 4' : undefined;
+
     const labelX = (startPoint.x + endPoint.x) / 2;
     const labelY = (startPoint.y + endPoint.y) / 2;
     const arrowX = endPoint.x;
     const arrowY = endPoint.y;
-    const strokeDasharray = edgeStyle === 'dashed' ? '6 4' : undefined;
 
     let labelAngle = angle;
     if (angle > 90 || angle < -90) {
@@ -89,7 +102,10 @@ function GraphEdgeComponent({
     }
 
     return (
-        <g className="graph-edge-group" data-selected={selected}>
+        <g
+            className={cn("graph-edge-group transition-opacity duration-300", isDimmed ? "opacity-10" : "opacity-100")}
+            data-selected={selected}
+        >
             <path
                 d={edgePath}
                 fill="none"
@@ -103,8 +119,7 @@ function GraphEdgeComponent({
                 stroke={baseColor}
                 strokeWidth={12}
                 strokeLinecap="round"
-                className="edge-glow"
-                style={{ filter: 'blur(6px)' }}
+                className="edge-glow blur-[6px]"
             />
             <path
                 d={edgePath}

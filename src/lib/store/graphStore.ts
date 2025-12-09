@@ -42,19 +42,23 @@ interface GraphState {
     // === Estado de Interação ===
     selectedNodeIds: Set<string>;
     isDragging: boolean;
+
+    // === Busca (Spotlight) ===
+    searchQuery: string;
+    highlightedNodeIds: string[];
 }
 
 interface GraphActions {
     // === Node Actions ===
     setNodes: (nodes: GraphNode[]) => void;
-    addNode: (node: Omit<GraphNode, 'id'>) => void;
+    addNode: (node: Omit<GraphNode, 'id'>) => string;
     updateNode: (id: string, updates: Partial<GraphNode>) => void;
     updateNodePosition: (id: string, x: number, y: number) => void;
     deleteNode: (id: string) => void;
 
     // === Edge Actions ===
     setEdges: (edges: GraphEdge[]) => void;
-    addEdge: (edge: Omit<GraphEdge, 'id'>) => void;
+    addEdge: (edge: Omit<GraphEdge, 'id'>) => string;
     updateEdge: (id: string, updates: Partial<GraphEdge>) => void;
     deleteEdge: (id: string) => void;
     invertEdgeDirection: (id: string) => void;
@@ -99,6 +103,11 @@ interface GraphActions {
     clearSelection: () => void;
     setIsDragging: (dragging: boolean) => void;
 
+    // === Busca (Spotlight) ===
+    setSearchQuery: (query: string) => void;
+    clearSearch: () => void;
+    navigateToFirstResult: () => void;
+
     // === System ===
     setCurrentSystemId: (systemId: string) => void;
     reset: () => void;
@@ -127,6 +136,10 @@ const initialState: Omit<GraphState, 'selectedNodeIds'> & { selectedNodeIds: Set
 
     selectedNodeIds: new Set(),
     isDragging: false,
+
+    // Busca
+    searchQuery: '',
+    highlightedNodeIds: [],
 };
 
 // Cria snapshot do estado atual
@@ -168,6 +181,7 @@ export const useGraphStore = create<GraphStore>()(
                     history: pushHistory(state),
                     future: [],
                 }));
+                return newNode.id;
             },
 
             updateNode: (id, updates) => {
@@ -215,7 +229,7 @@ export const useGraphStore = create<GraphStore>()(
                 const exists = edges.some(
                     (e) => e.source === edgeData.source && e.target === edgeData.target
                 );
-                if (exists) return;
+                if (exists) return '';
 
                 const newEdge: GraphEdge = {
                     ...edgeData,
@@ -226,6 +240,7 @@ export const useGraphStore = create<GraphStore>()(
                     history: pushHistory(state),
                     future: [],
                 }));
+                return newEdge.id;
             },
 
             deleteEdge: (id) => {
@@ -492,6 +507,34 @@ export const useGraphStore = create<GraphStore>()(
             clearSelection: () => set({ selectedNodeIds: new Set() }),
 
             setIsDragging: (dragging) => set({ isDragging: dragging }),
+
+            // === Busca (Spotlight) ===
+            setSearchQuery: (query) => {
+                const { nodes } = get();
+                if (!query.trim()) {
+                    set({ searchQuery: '', highlightedNodeIds: [] });
+                    return;
+                }
+
+                const lowerQuery = query.toLowerCase();
+                const matchingIds = nodes
+                    .filter((node) => node.title.toLowerCase().includes(lowerQuery))
+                    .map((node) => node.id);
+
+                set({ searchQuery: query, highlightedNodeIds: matchingIds });
+            },
+
+            clearSearch: () => set({ searchQuery: '', highlightedNodeIds: [] }),
+
+            navigateToFirstResult: () => {
+                // Esta função será chamada pelo componente que tem acesso ao ReactFlow
+                // O store apenas armazena os IDs, a navegação real é feita no componente
+                const { highlightedNodeIds } = get();
+                if (highlightedNodeIds.length > 0) {
+                    // Seleciona o primeiro resultado para facilitar navegação
+                    set({ selectedNodeIds: new Set([highlightedNodeIds[0]]) });
+                }
+            },
 
             // === System ===
             setCurrentSystemId: (systemId) => set({ currentSystemId: systemId }),

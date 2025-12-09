@@ -101,7 +101,9 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
             if (state.physicsEnabled !== prevState.physicsEnabled) {
                 if (state.physicsEnabled) {
                     // Ligando a física
-                    if (simulationManager.isPaused()) {
+                    const simNodeCount = simulationManager.getNodes().length;
+                    // Resume apenas se contagem de nós for igual (nenhum nó adicionado durante pausa)
+                    if (simulationManager.isPaused() && state.nodes.length === simNodeCount) {
                         simulationManager.resume();
                     } else {
                         // Precisa iniciar nova simulação

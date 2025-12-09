@@ -103,6 +103,10 @@ export const ZOOM = {
     GALAXY_THRESHOLD: 0.5,
     /** Threshold para Detail View (tags, quick add) */
     DETAIL_THRESHOLD: 1.2,
+    /** LOD: Threshold abaixo do qual mostra apenas ponto colorido */
+    LOD_FAR_THRESHOLD: 0.4,
+    /** LOD: Threshold acima do qual mostra nomes das tags */
+    LOD_CLOSE_THRESHOLD: 1.0,
 } as const;
 
 // === Cores do Tema ===

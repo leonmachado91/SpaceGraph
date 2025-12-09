@@ -21,6 +21,7 @@ export function toReactFlowNode(graphNode: GraphNode): Node {
             color: graphNode.color,
             icon: graphNode.icon,
             nodeType: graphNode.type,
+            tags: graphNode.tags || [], // IDs das tags para LOD
         },
     };
 }

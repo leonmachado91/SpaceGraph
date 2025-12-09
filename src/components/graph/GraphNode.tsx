@@ -1,15 +1,18 @@
 'use client';
 
-import { memo, useState } from 'react';
-import { Handle, Position, Node, NodeProps } from '@xyflow/react';
+import { memo, useState, useMemo } from 'react';
+import { Handle, Position, Node, NodeProps, useViewport, useReactFlow } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { NODE } from '@/lib/constants';
+import { NODE, ZOOM } from '@/lib/constants';
+import { useGraphStore } from '@/lib/store/graphStore';
 
 // ============================================================================
-// GRAPH NODE - Visual representation of a knowledge node
+// GRAPH NODE - Visual representation of a knowledge node with LOD
 // ============================================================================
-// Usa um único handle centralizado. As conexões visuais são calculadas
-// dinamicamente no GraphEdge baseado no ângulo entre os nós.
+// Level of Detail (LOD) baseado no zoom:
+// - LOD_FAR (zoom < 0.4): Apenas ponto colorido
+// - LOD_MEDIUM (0.4-1.0): Ícone, título e bolinhas de tags na circunferência
+// - LOD_CLOSE (zoom > 1.0): Mesmo, com tooltip de tags no hover
 // ============================================================================
 
 type CustomNodeData = {
@@ -17,10 +20,22 @@ type CustomNodeData = {
     color?: string;
     icon?: string;
     nodeType?: string;
+    tags?: string[];
     [key: string]: unknown;
 };
 
 type CustomNodeProps = NodeProps<Node<CustomNodeData>>;
+
+// Level of Detail baseado no zoom
+// - LOD_MEDIUM (zoom < 1.0): Ícone, título e bolinhas de tags
+// - LOD_CLOSE (zoom >= 1.0): Mesmo, com tooltip de tags no hover
+// Nota: LOD far foi removido pois useViewport causava bugs com edges
+type LODLevel = 'medium' | 'close';
+
+function getLODLevel(zoom: number): LODLevel {
+    if (zoom < ZOOM.LOD_CLOSE_THRESHOLD) return 'medium';
+    return 'close';
+}
 
 function getColorFromId(id: string): string {
     let hash = 0;
@@ -31,136 +46,240 @@ function getColorFromId(id: string): string {
     return NODE.COLOR_PALETTE[Math.abs(hash) % NODE.COLOR_PALETTE.length];
 }
 
-// Exporta o raio do nó para uso em outros componentes
+// Calcula posição de um ponto na circunferência do nó
+// Ângulo em graus (0 = direita, 90 = baixo, 180 = esquerda, 270 = cima)
+function getPositionOnCircle(angleDeg: number, radius: number) {
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return {
+        x: Math.cos(angleRad) * radius,
+        y: Math.sin(angleRad) * radius,
+    };
+}
+
 export const NODE_RADIUS = NODE.RADIUS;
 
 function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
-    const [isHovered, setIsHovered] = useState(false);
-    const [showTooltip, setShowTooltip] = useState(false);
+    const { zoom } = useViewport();
+    const lod = useMemo(() => getLODLevel(zoom), [zoom]);
+    const { nodes, edges } = useGraphStore.getState();
+    const reactFlow = useReactFlow();
 
-    // Cor do nó: usa data.color se existir, senão gera baseado no ID
+    // Estado local para hover (para performance)
+    const [isHovered, setIsHovered] = useState(false);
+    const [hoveredTagIndex, setHoveredTagIndex] = useState<number | null>(null);
+
+    // Dados do nó
     const nodeColor = data.color || getColorFromId(id);
+
+    // Spotlight Effect
+    const searchQuery = useGraphStore((s) => s.searchQuery);
+    const highlightedNodeIds = useGraphStore((s) => s.highlightedNodeIds);
+    const superTags = useGraphStore((s) => s.superTags);
+    const isSearching = searchQuery.length > 0;
+    const isHighlighted = highlightedNodeIds.includes(id);
+    const isDimmed = isSearching && !isHighlighted;
+
+    // Tags do nó com cores
+    const nodeTags = useMemo(() => {
+        if (!data.tags || data.tags.length === 0) return [];
+        return data.tags
+            .map((tagId) => superTags.find((t) => t.id === tagId))
+            .filter(Boolean)
+            .slice(0, 4); // Máximo 4 tags visíveis
+    }, [data.tags, superTags]);
+
+    // Posições das tags na circunferência (parte inferior, evitando handles)
+    // Handles estão em 0° (direita) e 180° (esquerda)
+    // Tags ficam na parte inferior: 210°, 240°, 270°, 300°, 330° (evitando 180° e 0°)
+    const tagAngles = [225, 270, 315, 135]; // Posições para até 4 tags
+
+    // Nós mantêm mesmo tamanho em todos os LODs
+    const nodeSize = NODE_RADIUS * 2;
 
     return (
         <div
             className={cn(
-                "relative flex items-center justify-center rounded-full transition-all duration-300",
-                "group cursor-pointer",
-                "animate-in zoom-in-50 fade-in duration-300",
-                selected
-                    ? "scale-110 z-50"
-                    : "scale-100 hover:scale-105 z-10"
+                "relative flex items-center justify-center transition-all duration-200",
+                "group cursor-pointer rounded-full",
+                selected ? "z-50" : "z-10",
+                isDimmed && "opacity-20 pointer-events-none"
             )}
-            style={{
-                width: NODE_RADIUS * 2,
-                height: NODE_RADIUS * 2,
-            }}
-            onMouseEnter={() => {
-                setIsHovered(true);
-                if (data.title.length > 8) {
-                    setTimeout(() => setShowTooltip(true), 500);
-                }
-            }}
+            style={{ width: nodeSize, height: nodeSize }}
+            onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => {
                 setIsHovered(false);
-                setShowTooltip(false);
+                setHoveredTagIndex(null);
             }}
         >
-            {/* Glow Effect Layer */}
-            <div
-                className={cn(
-                    "absolute inset-[-8px] rounded-full blur-xl transition-opacity duration-300",
-                    selected ? "opacity-50" : isHovered ? "opacity-30" : "opacity-0"
-                )}
-                style={{ backgroundColor: nodeColor }}
-            />
-
-            {/* Glass Orb Layer */}
-            <div
-                className={cn(
-                    "absolute inset-0 rounded-full border-2 transition-all duration-300",
-                    "bg-zinc-900/80 backdrop-blur-md shadow-lg",
-                    selected
-                        ? "shadow-[0_0_25px_-5px_var(--node-color)]"
-                        : isHovered
-                            ? "shadow-[0_0_15px_-5px_var(--node-color)]"
-                            : ""
-                )}
-                style={{
-                    borderColor: selected || isHovered ? nodeColor : 'rgba(255,255,255,0.1)',
-                    '--node-color': nodeColor,
-                } as React.CSSProperties}
-            />
-
-            {/* Handle SOURCE - visível no hover, lado direito */}
-            <Handle
-                type="source"
-                position={Position.Right}
-                id="center-source"
-                className={cn(
-                    "w-5! h-5! border-2! transition-all duration-200",
-                    "bg-zinc-800!",
-                    isHovered || selected
-                        ? "opacity-100! border-white/50!"
-                        : "opacity-0!"
-                )}
-                style={{
-                    borderColor: isHovered || selected ? nodeColor : undefined,
-                }}
-            />
-            {/* Handle TARGET - visível no hover, lado esquerdo */}
-            <Handle
-                type="target"
-                position={Position.Left}
-                id="center-target"
-                className={cn(
-                    "w-5! h-5! border-2! transition-all duration-200",
-                    "bg-zinc-800!",
-                    isHovered || selected
-                        ? "opacity-100! border-white/50!"
-                        : "opacity-0!"
-                )}
-                style={{
-                    borderColor: isHovered || selected ? nodeColor : undefined,
-                }}
-            />
-
-            {/* Content Layer */}
-            <div className="relative z-10 flex flex-col items-center justify-center p-2">
-                {/* Indicator dot */}
+            {/* ========== Visual completo (medium/close) ========== */}
+            <>
+                {/* Glow Effect */}
                 <div
-                    className="w-2.5 h-2.5 rounded-full mb-1.5 transition-transform duration-200"
+                    className={cn(
+                        "absolute inset-[-8px] rounded-full blur-xl transition-opacity duration-300",
+                        selected ? "opacity-50" : isHovered ? "opacity-30" : "opacity-0"
+                    )}
+                    style={{ backgroundColor: nodeColor }}
+                />
+
+                {/* Glass Orb */}
+                <div
+                    className={cn(
+                        "absolute inset-0 rounded-full border-2 transition-all duration-300",
+                        "bg-zinc-900/80 backdrop-blur-md"
+                    )}
                     style={{
-                        backgroundColor: nodeColor,
-                        transform: selected ? 'scale(1.2)' : 'scale(1)',
-                        boxShadow: `0 0 8px ${nodeColor}`,
+                        borderColor: selected || isHovered ? nodeColor : 'rgba(255,255,255,0.1)',
+                        boxShadow: selected ? `0 0 25px -5px ${nodeColor}` : isHovered ? `0 0 15px -5px ${nodeColor}` : 'none',
                     }}
                 />
 
-                {/* Title */}
-                <div className={cn(
-                    "text-[10px] font-medium tracking-wide uppercase transition-colors duration-200",
-                    "max-w-[55px] truncate text-center leading-tight",
-                    selected ? "text-white" : "text-zinc-400 group-hover:text-zinc-200"
-                )}>
-                    {data.title}
-                </div>
-            </div>
-
-            {/* Tooltip para títulos longos */}
-            {showTooltip && data.title.length > 8 && (
-                <div
+                {/* Handles */}
+                <Handle
+                    type="source"
+                    position={Position.Right}
+                    id="center-source"
                     className={cn(
-                        "absolute -top-10 left-1/2 -translate-x-1/2 z-[100]",
-                        "px-2 py-1 rounded-md",
-                        "bg-zinc-800/95 backdrop-blur-sm border border-white/10",
-                        "text-xs text-white whitespace-nowrap",
-                        "animate-in fade-in zoom-in-95 duration-150"
+                        "w-5! h-5! border-2! transition-all duration-200 bg-zinc-800! cursor-pointer hover:scale-125!",
+                        isHovered || selected ? "opacity-100! border-white/50!" : "opacity-0!"
                     )}
-                >
-                    {data.title}
+                    style={{ borderColor: isHovered || selected ? nodeColor : undefined }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        // Quick Add: cria nó filho a +150px à direita
+                        const currentNode = nodes.find(n => n.id === id);
+                        if (!currentNode) return;
+
+                        const newNodeId = crypto.randomUUID();
+                        const newNode = {
+                            id: newNodeId,
+                            title: 'New Node',
+                            type: 'default' as const,
+                            x: currentNode.x + 150,
+                            y: currentNode.y,
+                            color: '#6366f1',
+                            systemId: currentNode.systemId,
+                        };
+                        const newEdge = {
+                            id: crypto.randomUUID(),
+                            source: id,
+                            target: newNodeId,
+                            systemId: currentNode.systemId,
+                        };
+
+                        // Atualiza Store
+                        useGraphStore.setState({
+                            nodes: [...nodes, newNode],
+                            edges: [...edges, newEdge],
+                        });
+
+                        // Atualiza React Flow para que a física pegue o novo nó
+                        reactFlow.addNodes({
+                            id: newNodeId,
+                            position: { x: newNode.x, y: newNode.y },
+                            data: { title: newNode.title, color: newNode.color, tags: [] },
+                            type: 'orb',
+                        });
+
+                        // Adiciona edge no RF também para visualização imediata (embora simulator recriaria links)
+                        reactFlow.addEdges({
+                            id: newEdge.id,
+                            source: newEdge.source,
+                            target: newEdge.target,
+                            type: 'default',
+                        });
+                    }}
+                />
+                <Handle
+                    type="target"
+                    position={Position.Left}
+                    id="center-target"
+                    className={cn(
+                        "w-5! h-5! border-2! transition-all duration-200 bg-zinc-800!",
+                        isHovered || selected ? "opacity-100! border-white/50!" : "opacity-0!"
+                    )}
+                    style={{ borderColor: isHovered || selected ? nodeColor : undefined }}
+                />
+
+                {/* Content: Ícone + Título */}
+                <div className="relative z-10 flex flex-col items-center justify-center p-2">
+                    <div
+                        className="w-2.5 h-2.5 rounded-full mb-1.5"
+                        style={{
+                            backgroundColor: nodeColor,
+                            boxShadow: `0 0 8px ${nodeColor}`,
+                        }}
+                    />
+                    <div className={cn(
+                        "text-[10px] font-medium tracking-wide uppercase",
+                        "max-w-[55px] truncate text-center leading-tight",
+                        selected ? "text-white" : "text-zinc-400 group-hover:text-zinc-200"
+                    )}>
+                        {data.title}
+                    </div>
                 </div>
-            )}
+
+                {/* Tags: Bolinhas na circunferência (parte inferior) */}
+                {nodeTags.length > 0 && nodeTags.map((tag, index) => {
+                    const pos = getPositionOnCircle(tagAngles[index] || 270, NODE_RADIUS + 4);
+                    const isTagHovered = hoveredTagIndex === index;
+
+                    return (
+                        <div
+                            key={tag?.id || index}
+                            className="absolute pointer-events-auto"
+                            style={{
+                                left: '50%',
+                                top: '50%',
+                                transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px)`,
+                            }}
+                            onMouseEnter={() => setHoveredTagIndex(index)}
+                            onMouseLeave={() => setHoveredTagIndex(null)}
+                        >
+                            {/* Bolinha da tag */}
+                            <div
+                                className="w-3 h-3 rounded-full cursor-pointer transition-transform hover:scale-125"
+                                style={{
+                                    backgroundColor: tag?.color || '#666',
+                                    boxShadow: `0 0 6px ${tag?.color || '#666'}`,
+                                }}
+                            />
+
+                            {/* Tooltip com nome da tag (apenas no hover) */}
+                            {isTagHovered && lod === 'close' && (
+                                <div
+                                    className={cn(
+                                        "absolute left-1/2 -translate-x-1/2 z-50",
+                                        "px-2 py-1 rounded-md whitespace-nowrap",
+                                        "bg-zinc-800/95 backdrop-blur-sm border border-white/10",
+                                        "text-[10px] text-white",
+                                        "animate-in fade-in zoom-in-95 duration-150",
+                                        // Posiciona tooltip baseado no ângulo
+                                        tagAngles[index] > 180 ? "-top-7" : "top-5"
+                                    )}
+                                >
+                                    {tag?.name}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+
+                {/* Tooltip para título longo (hover no nó) */}
+                {isHovered && data.title.length > 8 && (
+                    <div
+                        className={cn(
+                            "absolute -top-10 left-1/2 -translate-x-1/2 z-50",
+                            "px-2 py-1 rounded-md",
+                            "bg-zinc-800/95 backdrop-blur-sm border border-white/10",
+                            "text-xs text-white whitespace-nowrap",
+                            "animate-in fade-in zoom-in-95 duration-150"
+                        )}
+                    >
+                        {data.title}
+                    </div>
+                )}
+            </>
         </div>
     );
 }
