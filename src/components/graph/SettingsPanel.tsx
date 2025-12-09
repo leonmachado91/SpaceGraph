@@ -1,7 +1,18 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useGraphStore, usePhysicsEnabled, useRepulsionStrength, useLinkDistance, useCollisionRadius } from '@/lib/store/graphStore';
+import {
+    useGraphStore,
+    usePhysicsEnabled,
+    useRepulsionStrength,
+    useLinkDistance,
+    useCollisionRadius,
+    useCenterStrength,
+    useAxisStrength,
+    useDensityGenericFactor,
+    useDensityChargeFactor,
+    useDensityMaxSize
+} from '@/lib/store/graphStore';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -34,6 +45,8 @@ function SliderControl({ label, value, min, max, step = 1, onChange, formatValue
                 step={step}
                 value={value}
                 onChange={(e) => onChange(Number(e.target.value))}
+                aria-label={label}
+                title={label}
                 className={cn(
                     "w-full h-1.5 rounded-full appearance-none cursor-pointer",
                     "bg-zinc-700",
@@ -61,11 +74,21 @@ export function SettingsPanel({ isOpen, onClose, onReinitSimulation }: SettingsP
     const repulsionStrength = useRepulsionStrength();
     const linkDistance = useLinkDistance();
     const collisionRadius = useCollisionRadius();
+    const centerStrength = useCenterStrength();
+    const axisStrength = useAxisStrength();
+    const densityGenericFactor = useDensityGenericFactor();
+    const densityChargeFactor = useDensityChargeFactor();
+    const densityMaxSize = useDensityMaxSize();
 
     const {
         setRepulsionStrength,
         setLinkDistance,
         setCollisionRadius,
+        setCenterStrength,
+        setAxisStrength,
+        setDensityGenericFactor,
+        setDensityChargeFactor,
+        setDensityMaxSize,
         togglePhysics,
     } = useGraphStore();
 
@@ -82,6 +105,31 @@ export function SettingsPanel({ isOpen, onClose, onReinitSimulation }: SettingsP
 
     const handleCollisionChange = (value: number) => {
         setCollisionRadius(value);
+        setTimeout(() => onReinitSimulation(), 50);
+    };
+
+    const handleCenterChange = (value: number) => {
+        setCenterStrength(value);
+        setTimeout(() => onReinitSimulation(), 50);
+    };
+
+    const handleAxisChange = (value: number) => {
+        setAxisStrength(value);
+        setTimeout(() => onReinitSimulation(), 50);
+    };
+
+    const handleDensityGenericChange = (value: number) => {
+        setDensityGenericFactor(value);
+        setTimeout(() => onReinitSimulation(), 50);
+    };
+
+    const handleDensityChargeChange = (value: number) => {
+        setDensityChargeFactor(value);
+        setTimeout(() => onReinitSimulation(), 50);
+    };
+
+    const handleDensityMaxSizeChange = (value: number) => {
+        setDensityMaxSize(value);
         setTimeout(() => onReinitSimulation(), 50);
     };
 
@@ -111,6 +159,8 @@ export function SettingsPanel({ isOpen, onClose, onReinitSimulation }: SettingsP
                     <h2 className="text-lg font-semibold text-white">Configurações</h2>
                     <button
                         onClick={onClose}
+                        title="Fechar Configurações"
+                        aria-label="Fechar Configurações"
                         className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
                     >
                         <X size={18} />
@@ -124,9 +174,12 @@ export function SettingsPanel({ isOpen, onClose, onReinitSimulation }: SettingsP
                         <span className="text-sm text-zinc-300">Física Ativa</span>
                         <button
                             onClick={togglePhysics}
+                            title={physicsEnabled ? "Desativar Física" : "Ativar Física"}
+                            aria-label={physicsEnabled ? "Desativar Física" : "Ativar Física"}
                             className={cn(
                                 "w-12 h-6 rounded-full transition-colors duration-200",
                                 "relative",
+                                "bg-zinc-700",
                                 physicsEnabled ? "bg-indigo-500" : "bg-zinc-700"
                             )}
                         >
@@ -170,6 +223,67 @@ export function SettingsPanel({ isOpen, onClose, onReinitSimulation }: SettingsP
                         max={100}
                         step={5}
                         onChange={handleCollisionChange}
+                        formatValue={(v) => `${v}px`}
+                    />
+
+                    <hr className="border-white/10" />
+                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Gravidade</h3>
+
+                    {/* Força Central */}
+                    <SliderControl
+                        label="Força Central"
+                        value={centerStrength}
+                        min={0}
+                        max={0.2}
+                        step={0.005}
+                        onChange={handleCenterChange}
+                        formatValue={(v) => v.toFixed(3)}
+                    />
+
+                    {/* Força Eixos */}
+                    <SliderControl
+                        label="Força Eixos (X/Y)"
+                        value={axisStrength}
+                        min={0}
+                        max={0.1}
+                        step={0.001}
+                        onChange={handleAxisChange}
+                        formatValue={(v) => v.toFixed(3)}
+                    />
+
+                    <hr className="border-white/10" />
+                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Densidade (Tamanho)</h3>
+
+                    {/* Fator de Crescimento */}
+                    <SliderControl
+                        label="Fator de Crescimento"
+                        value={densityGenericFactor}
+                        min={1}
+                        max={50}
+                        step={1}
+                        onChange={handleDensityGenericChange}
+                        formatValue={(v) => `${v}x`}
+                    />
+
+                    {/* Fator de Carga */}
+                    <SliderControl
+                        label="Fator de Carga (Repulsão)"
+                        value={densityChargeFactor}
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        onChange={handleDensityChargeChange}
+                        formatValue={(v) => `${(v * 100).toFixed(0)}%`}
+                    />
+
+                    {/* Tamanho Máximo */}
+                    <SliderControl
+                        label="Tamanho Máximo"
+                        value={densityMaxSize}
+                        min={100}
+                        max={2000}
+                        step={50}
+                        onChange={handleDensityMaxSizeChange}
                         formatValue={(v) => `${v}px`}
                     />
                 </div>

@@ -1,17 +1,17 @@
-- [ ] **1. GraphStore**
-    - [ ] Adicionar novos campos de física ao `GraphState`.
-    - [ ] Adicionar ações `set...` ao `GraphActions`.
-    - [ ] Criar hooks seletores (`use...`).
+- [x] **1. GraphStore**
+    - [x] Adicionar novos campos de física ao `GraphState`.
+    - [x] Adicionar ações `set...` ao `GraphActions`.
+    - [x] Criar hooks seletores (`use...`).
 
-- [ ] **2. D3SimulationManager**
-    - [ ] Atualizar `SimulationConfig` interface.
-    - [ ] Atualizar `updateConfig` para reaplicar `forceCenter`, `forceX`, `forceY` e atualizar lógica de densidade.
-    - [ ] Remover dependência direta de `PHYSICS` onde agora é configurável.
+- [x] **2. D3SimulationManager**
+    - [x] Atualizar `SimulationConfig` interface.
+    - [x] Atualizar `updateConfig` para reaplicar `forceCenter`, `forceX`, `forceY` e atualizar lógica de densidade.
+    - [x] Remover dependência direta de `PHYSICS` onde agora é configurável.
 
-- [ ] **3. SettingsPanel**
-    - [ ] Adicionar sliders para as novas variáveis.
-    - [ ] Agrupar controles por categoria (Física Básica, Densidade, Gravidade).
+- [x] **3. SettingsPanel**
+    - [x] Adicionar sliders para as novas variáveis.
+    - [x] Agrupar controles por categoria (Física Básica, Densidade, Gravidade).
 
-- [ ] **4. Componentes Visuais (Reatividade)**
-    - [ ] `GraphNode`: Ler fatores de densidade do store.
-    - [ ] `GraphEdge`: Ler fatores de densidade do store.
+- [x] **4. Componentes Visuais (Reatividade)**
+    - [x] `GraphNode`: Ler fatores de densidade do store.
+    - [x] `GraphEdge`: Ler fatores de densidade do store.

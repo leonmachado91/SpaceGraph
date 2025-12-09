@@ -3,8 +3,8 @@
 import { memo, useState, useMemo } from 'react';
 import { Handle, Position, Node, NodeProps, useViewport, useReactFlow } from '@xyflow/react';
 import { cn } from '@/lib/utils';
-import { NODE, ZOOM, PHYSICS } from '@/lib/constants';
-import { useGraphStore } from '@/lib/store/graphStore';
+import { NODE, ZOOM } from '@/lib/constants';
+import { useGraphStore, useDensityGenericFactor, useDensityMaxSize } from '@/lib/store/graphStore';
 
 // ============================================================================
 // GRAPH NODE - Visual representation of a knowledge node with LOD
@@ -103,8 +103,9 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
     // Tamanho Dinâmico
     // Base: 70px (35 * 2)
     const baseSize = NODE_RADIUS * 2;
-    const growthFactor = PHYSICS.DENSITY_GENERIC_FACTOR;
-    const dynamicSize = Math.min(baseSize + (degree * growthFactor), PHYSICS.DENSITY_MAX_SIZE);
+    const growthFactor = useDensityGenericFactor();
+    const maxSize = useDensityMaxSize();
+    const dynamicSize = Math.min(baseSize + (degree * growthFactor), maxSize);
     const currentRadius = dynamicSize / 2;
 
     return (

@@ -107,11 +107,21 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
                         simulationManager.resume();
                     } else {
                         // Precisa iniciar nova simulação
-                        const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = state;
+                        const {
+                            nodes, edges,
+                            repulsionStrength, linkDistance, collisionRadius,
+                            centerStrength, axisStrength,
+                            densityGenericFactor, densityChargeFactor, densityMaxSize
+                        } = state;
                         simulationManager.start(nodes, edges, {
                             repulsionStrength,
                             linkDistance,
                             collisionRadius,
+                            centerStrength,
+                            axisStrength,
+                            densityGenericFactor,
+                            densityChargeFactor,
+                            densityMaxSize,
                         });
                     }
                 } else {
@@ -124,24 +134,50 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
             // Mudança na quantidade de nós
             if (state.nodes.length !== prevState.nodes.length && state.physicsEnabled) {
                 setTimeout(() => {
-                    const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
-                    simulationManager.start(nodes, edges, {
-                        repulsionStrength,
-                        linkDistance,
-                        collisionRadius,
-                    });
+                    setTimeout(() => {
+                        const {
+                            nodes, edges,
+                            repulsionStrength, linkDistance, collisionRadius,
+                            centerStrength, axisStrength,
+                            densityGenericFactor, densityChargeFactor, densityMaxSize
+                        } = getStoreState();
+
+                        simulationManager.start(nodes, edges, {
+                            repulsionStrength,
+                            linkDistance,
+                            collisionRadius,
+                            centerStrength,
+                            axisStrength,
+                            densityGenericFactor,
+                            densityChargeFactor,
+                            densityMaxSize,
+                        });
+                    }, 50);
                 }, 50);
             }
 
             // Mudança na quantidade de edges
             if (state.edges.length !== prevState.edges.length && state.physicsEnabled) {
                 setTimeout(() => {
-                    const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
-                    simulationManager.start(nodes, edges, {
-                        repulsionStrength,
-                        linkDistance,
-                        collisionRadius,
-                    });
+                    setTimeout(() => {
+                        const {
+                            nodes, edges,
+                            repulsionStrength, linkDistance, collisionRadius,
+                            centerStrength, axisStrength,
+                            densityGenericFactor, densityChargeFactor, densityMaxSize
+                        } = getStoreState();
+
+                        simulationManager.start(nodes, edges, {
+                            repulsionStrength,
+                            linkDistance,
+                            collisionRadius,
+                            centerStrength,
+                            axisStrength,
+                            densityGenericFactor,
+                            densityChargeFactor,
+                            densityMaxSize,
+                        });
+                    }, 50);
                 }, 50);
             }
 
@@ -149,12 +185,22 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
             if (
                 state.repulsionStrength !== prevState.repulsionStrength ||
                 state.linkDistance !== prevState.linkDistance ||
-                state.collisionRadius !== prevState.collisionRadius
+                state.collisionRadius !== prevState.collisionRadius ||
+                state.centerStrength !== prevState.centerStrength ||
+                state.axisStrength !== prevState.axisStrength ||
+                state.densityGenericFactor !== prevState.densityGenericFactor ||
+                state.densityChargeFactor !== prevState.densityChargeFactor ||
+                state.densityMaxSize !== prevState.densityMaxSize
             ) {
                 simulationManager.updateConfig({
                     repulsionStrength: state.repulsionStrength,
                     linkDistance: state.linkDistance,
                     collisionRadius: state.collisionRadius,
+                    centerStrength: state.centerStrength,
+                    axisStrength: state.axisStrength,
+                    densityGenericFactor: state.densityGenericFactor,
+                    densityChargeFactor: state.densityChargeFactor,
+                    densityMaxSize: state.densityMaxSize,
                 });
             }
         });
@@ -165,7 +211,12 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
     // === Inicialização ===
 
     useEffect(() => {
-        const { nodes, edges, physicsEnabled, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+        const {
+            nodes, edges, physicsEnabled,
+            repulsionStrength, linkDistance, collisionRadius,
+            centerStrength, axisStrength,
+            densityGenericFactor, densityChargeFactor, densityMaxSize
+        } = getStoreState();
 
         if (physicsEnabled && nodes.length > 0 && simulationManager.isIdle()) {
             // Pequeno delay para garantir que o React Flow está pronto
@@ -174,6 +225,11 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
                     repulsionStrength,
                     linkDistance,
                     collisionRadius,
+                    centerStrength,
+                    axisStrength,
+                    densityGenericFactor,
+                    densityChargeFactor,
+                    densityMaxSize,
                 });
             }, 100);
 
@@ -194,13 +250,23 @@ export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
     // === API Pública ===
 
     const initSimulation = useCallback(() => {
-        const { nodes, edges, physicsEnabled, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+        const {
+            nodes, edges, physicsEnabled,
+            repulsionStrength, linkDistance, collisionRadius,
+            centerStrength, axisStrength,
+            densityGenericFactor, densityChargeFactor, densityMaxSize
+        } = getStoreState();
         if (!physicsEnabled) return;
 
         simulationManager.start(nodes, edges, {
             repulsionStrength,
             linkDistance,
             collisionRadius,
+            centerStrength,
+            axisStrength,
+            densityGenericFactor,
+            densityChargeFactor,
+            densityMaxSize,
         });
     }, [getStoreState]);
 

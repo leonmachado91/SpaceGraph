@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { GraphNode, GraphEdge, SuperTag } from '@/types/graph';
+import { PHYSICS } from '@/lib/constants';
 
 // ============================================================================
 // GRAPH STORE v2.1 - Fonte Única de Verdade para o NeoGraph
@@ -35,6 +36,12 @@ interface GraphState {
     repulsionStrength: number;
     linkDistance: number;
     collisionRadius: number;
+    // Advanced Physics
+    centerStrength: number;
+    axisStrength: number;
+    densityGenericFactor: number;
+    densityChargeFactor: number;
+    densityMaxSize: number;
 
     // === Configurações Visuais ===
     showGrid: boolean;
@@ -94,6 +101,11 @@ interface GraphActions {
     setRepulsionStrength: (strength: number) => void;
     setLinkDistance: (distance: number) => void;
     setCollisionRadius: (radius: number) => void;
+    setCenterStrength: (strength: number) => void;
+    setAxisStrength: (strength: number) => void;
+    setDensityGenericFactor: (factor: number) => void;
+    setDensityChargeFactor: (factor: number) => void;
+    setDensityMaxSize: (size: number) => void;
 
     // === Visual Settings ===
     toggleGrid: () => void;
@@ -132,8 +144,13 @@ const initialState: Omit<GraphState, 'selectedNodeIds'> & { selectedNodeIds: Set
 
     physicsEnabled: true,
     repulsionStrength: -300,
-    linkDistance: 150,
-    collisionRadius: 40,
+    linkDistance: PHYSICS.LINK_DISTANCE_DEFAULT,
+    collisionRadius: PHYSICS.COLLISION_RADIUS_DEFAULT,
+    centerStrength: PHYSICS.CENTER_STRENGTH,
+    axisStrength: PHYSICS.AXIS_STRENGTH,
+    densityGenericFactor: PHYSICS.DENSITY_GENERIC_FACTOR,
+    densityChargeFactor: PHYSICS.DENSITY_CHARGE_FACTOR,
+    densityMaxSize: PHYSICS.DENSITY_MAX_SIZE,
 
     showGrid: true,
 
@@ -486,6 +503,11 @@ export const useGraphStore = create<GraphStore>()(
             setRepulsionStrength: (strength) => set({ repulsionStrength: strength }),
             setLinkDistance: (distance) => set({ linkDistance: distance }),
             setCollisionRadius: (radius) => set({ collisionRadius: radius }),
+            setCenterStrength: (strength) => set({ centerStrength: strength }),
+            setAxisStrength: (strength) => set({ axisStrength: strength }),
+            setDensityGenericFactor: (factor) => set({ densityGenericFactor: factor }),
+            setDensityChargeFactor: (factor) => set({ densityChargeFactor: factor }),
+            setDensityMaxSize: (size) => set({ densityMaxSize: size }),
 
             // === Visual Settings ===
             toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
@@ -571,6 +593,11 @@ export const useGraphStore = create<GraphStore>()(
                 repulsionStrength: state.repulsionStrength,
                 linkDistance: state.linkDistance,
                 collisionRadius: state.collisionRadius,
+                centerStrength: state.centerStrength,
+                axisStrength: state.axisStrength,
+                densityGenericFactor: state.densityGenericFactor,
+                densityChargeFactor: state.densityChargeFactor,
+                densityMaxSize: state.densityMaxSize,
                 showGrid: state.showGrid,
             }),
             // Desserializa o Set corretamente ao carregar
@@ -594,6 +621,11 @@ export const usePhysicsEnabled = () => useGraphStore((state) => state.physicsEna
 export const useRepulsionStrength = () => useGraphStore((state) => state.repulsionStrength);
 export const useLinkDistance = () => useGraphStore((state) => state.linkDistance);
 export const useCollisionRadius = () => useGraphStore((state) => state.collisionRadius);
+export const useCenterStrength = () => useGraphStore((state) => state.centerStrength);
+export const useAxisStrength = () => useGraphStore((state) => state.axisStrength);
+export const useDensityGenericFactor = () => useGraphStore((state) => state.densityGenericFactor);
+export const useDensityChargeFactor = () => useGraphStore((state) => state.densityChargeFactor);
+export const useDensityMaxSize = () => useGraphStore((state) => state.densityMaxSize);
 
 export const useShowGrid = () => useGraphStore((state) => state.showGrid);
 export const useIsDragging = () => useGraphStore((state) => state.isDragging);

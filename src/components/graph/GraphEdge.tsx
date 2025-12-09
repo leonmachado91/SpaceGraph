@@ -1,8 +1,7 @@
 import { memo, useMemo } from 'react';
 import { EdgeProps, EdgeLabelRenderer, useStore } from '@xyflow/react';
 import { NODE_RADIUS } from './GraphNode';
-import { PHYSICS } from '@/lib/constants'; // Importar PHYSICS
-import { useGraphStore } from '@/lib/store/graphStore';
+import { useGraphStore, useDensityGenericFactor, useDensityMaxSize } from '@/lib/store/graphStore';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -30,12 +29,16 @@ function getPointOnCircle(
     };
 }
 
-// Helper para calcular raio dinâmico (copiado do GraphNode para consistência)
-function getNodeRadius(degree: number): number {
-    const baseSize = NODE_RADIUS * 2;
-    const growthFactor = PHYSICS.DENSITY_GENERIC_FACTOR;
-    const dynamicSize = Math.min(baseSize + (degree * growthFactor), PHYSICS.DENSITY_MAX_SIZE);
-    return dynamicSize / 2;
+// Helper para calcular raio dinâmico (componente agora)
+function useNodeRadius() {
+    const growthFactor = useDensityGenericFactor();
+    const maxSize = useDensityMaxSize();
+
+    return (degree: number) => {
+        const baseSize = NODE_RADIUS * 2;
+        const dynamicSize = Math.min(baseSize + (degree * growthFactor), maxSize);
+        return dynamicSize / 2;
+    };
 }
 
 function GraphEdgeComponent({
@@ -73,6 +76,8 @@ function GraphEdgeComponent({
     const edgeStyle = edgeData?.style || 'solid';
     const label = edgeData?.label;
 
+    const getNodeRadius = useNodeRadius();
+
     // Calcular graus e raios dinâmicos
     const { sourceRadius, targetRadius } = useMemo(() => {
         const sourceDegree = allEdges.filter(e => e.source === source || e.target === source).length;
@@ -82,7 +87,7 @@ function GraphEdgeComponent({
             sourceRadius: getNodeRadius(sourceDegree),
             targetRadius: getNodeRadius(targetDegree)
         };
-    }, [allEdges, source, target]);
+    }, [allEdges, source, target, getNodeRadius]);
 
     // Centro dos nós
     // O centro visual não muda (é x + raio dinâmico), mas a posição (x,y) do React Flow é o canto superior esquerdo.
