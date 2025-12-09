@@ -108,7 +108,7 @@ function GraphCanvasContent() {
 
     // Handle node changes (position, selection, etc.)
     const onNodesChange = useCallback(
-        (changes: NodeChange<Node>[]) => {
+        (changes: NodeChange[]) => {
             changes.forEach((change) => {
                 // Handle position changes (dragging)
                 if (change.type === 'position' && change.id) {

@@ -1,64 +1,33 @@
-import { useEffect, useCallback } from 'react';
-import {
-    forceSimulation,
-    forceLink,
-    forceManyBody,
-    forceCenter,
-    forceCollide,
-    forceX,
-    forceY,
-    Simulation,
-    SimulationNodeDatum,
-    SimulationLinkDatum,
-} from 'd3-force';
+import { useEffect, useCallback, useRef } from 'react';
 import type { ReactFlowInstance } from '@xyflow/react';
 import { useGraphStore } from '@/lib/store/graphStore';
+import { simulationManager, SimNode } from '@/lib/simulation/D3SimulationManager';
 
 // ============================================================================
-// D3 SIMULATION HOOK - FÇðsica do Grafo (DESACOPLADO DO ZUSTAND)
+// USE D3 SIMULATION - Hook React para física do grafo
 // ============================================================================
-// Atualiza posiÇõÇæes direto no React Flow (setNodes) e persiste no Zustand
-// apenas de forma debounced ou em eventos chave (drag end, stop).
+// Este hook conecta o D3SimulationManager ao React Flow e ao Zustand store.
+// 
+// Responsabilidades:
+// - Sincronizar posições da simulação com o React Flow (visual)
+// - Persistir posições no Zustand store (debounced)
+// - Reagir a mudanças no state (physicsEnabled, nodes, edges)
 // ============================================================================
 
-interface SimNode extends SimulationNodeDatum {
-    id: string;
-    label?: string;
-    x: number;
-    y: number;
-    fx?: number | null;
-    fy?: number | null;
-}
-
-interface SimLink extends SimulationLinkDatum<SimNode> {
-    id: string;
-}
-
-// SINGLETON
-let simulation: Simulation<SimNode, SimLink> | null = null;
-let simNodes: SimNode[] = [];
-let lastTickTime = 0;
-let reactFlowInstance: ReactFlowInstance | null = null;
-let persistTimeout: ReturnType<typeof setTimeout> | null = null;
-
-const TICK_THROTTLE_MS = 16; // ~60fps para animaÇõÇœ mais fluida
 const PERSIST_DEBOUNCE_MS = 800;
-const RESTART_ALPHA = 0.3;
 
-export function useD3Simulation(
-    rfInstance?: ReactFlowInstance | null,
-) {
+export function useD3Simulation(rfInstance?: ReactFlowInstance | null) {
     const getStoreState = useGraphStore.getState;
+    const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const setReactFlowInstance = useCallback((instance: ReactFlowInstance | null) => {
-        reactFlowInstance = instance ?? null;
-    }, []);
+    // === Persistência no Zustand ===
 
     const persistPositions = useCallback((immediate = false) => {
-        if (!simNodes.length) return;
+        const nodes = simulationManager.getNodes();
+        if (nodes.length === 0) return;
 
         const positions = new Map<string, { x: number; y: number }>();
-        simNodes.forEach((node) => {
+        nodes.forEach((node) => {
             if (node.x !== undefined && node.y !== undefined) {
                 positions.set(node.id, { x: node.x, y: node.y });
             }
@@ -69,212 +38,224 @@ export function useD3Simulation(
         const { updateNodePositions } = getStoreState();
 
         if (immediate) {
-            if (persistTimeout) {
-                clearTimeout(persistTimeout);
-                persistTimeout = null;
+            if (persistTimeoutRef.current) {
+                clearTimeout(persistTimeoutRef.current);
+                persistTimeoutRef.current = null;
             }
             updateNodePositions(positions);
             return;
         }
 
-        if (persistTimeout) {
-            clearTimeout(persistTimeout);
+        if (persistTimeoutRef.current) {
+            clearTimeout(persistTimeoutRef.current);
         }
-        persistTimeout = setTimeout(() => {
+        persistTimeoutRef.current = setTimeout(() => {
             updateNodePositions(positions);
-            persistTimeout = null;
+            persistTimeoutRef.current = null;
         }, PERSIST_DEBOUNCE_MS);
     }, [getStoreState]);
 
-    const getLinkDistance = useCallback((link: SimLink): number => {
-        const sourceNode = typeof link.source === 'object' ? link.source : null;
-        const targetNode = typeof link.target === 'object' ? link.target : null;
-        const sourceLabel = sourceNode?.label?.length ?? 5;
-        const targetLabel = targetNode?.label?.length ?? 5;
-        const { linkDistance } = getStoreState();
-        return linkDistance + (sourceLabel + targetLabel) * 2;
-    }, [getStoreState]);
+    // === Callback de Tick - Atualiza React Flow ===
 
-    const initSimulation = useCallback(() => {
-        const { nodes, edges, physicsEnabled, repulsionStrength, collisionRadius } = getStoreState();
+    useEffect(() => {
+        if (!rfInstance) return;
 
-        if (!physicsEnabled || nodes.length === 0) return;
-
-        if (simulation) simulation.stop();
-
-        simNodes = nodes.map((node) => {
-            const existing = simNodes.find((n) => n.id === node.id);
-            return {
-                id: node.id,
-                label: node.title,
-                x: existing?.x ?? node.x,
-                y: existing?.y ?? node.y,
-                vx: existing?.vx ?? 0,
-                vy: existing?.vy ?? 0,
-            };
+        simulationManager.setOnTick((simNodes: SimNode[]) => {
+            const index = new Map(simNodes.map((n) => [n.id, n]));
+            rfInstance.setNodes((nodes) =>
+                nodes.map((node) => {
+                    const simNode = index.get(node.id);
+                    if (simNode?.x !== undefined && simNode?.y !== undefined) {
+                        return {
+                            ...node,
+                            position: { x: simNode.x, y: simNode.y },
+                        };
+                    }
+                    return node;
+                })
+            );
         });
 
-        const simLinks: SimLink[] = edges.map((edge) => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-        }));
+        return () => {
+            simulationManager.setOnTick(null);
+        };
+    }, [rfInstance]);
 
-        simulation = forceSimulation<SimNode>(simNodes)
-            .force('charge', forceManyBody<SimNode>().strength(repulsionStrength))
-            .force('link', forceLink<SimNode, SimLink>(simLinks)
-                .id((d) => d.id)
-                .distance(getLinkDistance)
-                .strength(0.5)
-            )
-            .force('center', forceCenter(0, 0).strength(0.02))
-            .force('x', forceX(0).strength(0.008))
-            .force('y', forceY(0).strength(0.008))
-            .force('collide', forceCollide<SimNode>()
-                .radius((d) => Math.max(collisionRadius, (d.label?.length ?? 5) * 4 + 25))
-                .iterations(2)
-            )
-            .alphaDecay(0.02) // decai mais rÇ­pido para encerrar simulaÇõÇœ sem arrastar lag
-            .velocityDecay(0.2) // menos amortecimento para suavizar movimento
-            .alphaMin(0.001)
-            .on('tick', () => {
-                const now = performance.now();
-                if (now - lastTickTime < TICK_THROTTLE_MS) return;
-                lastTickTime = now;
-
-                if (reactFlowInstance) {
-                    const index = new Map(simNodes.map((n) => [n.id, n]));
-                    reactFlowInstance.setNodes((nodes) =>
-                        nodes.map((node) => {
-                            const simNode = index.get(node.id);
-                            if (simNode?.x !== undefined && simNode?.y !== undefined) {
-                                return {
-                                    ...node,
-                                    position: { x: simNode.x, y: simNode.y },
-                                };
-                            }
-                            return node;
-                        })
-                    );
-                }
-            });
-
-        console.log('[D3] Simulation started');
-    }, [getStoreState, getLinkDistance, persistPositions]);
-
-    // PersistÇ‰ncia ao final da simulaÇõÇœ (quando alpha chega ao alphaMin)
-    useEffect(() => {
-        if (simulation) {
-            const handler = () => persistPositions(true);
-            simulation.on('end', handler);
-            return () => {
-                simulation?.on('end', null);
-            };
-        }
-    }, [persistPositions]);
-
-    const updateNodeInSimulation = useCallback((nodeId: string, x: number, y: number) => {
-        if (!simulation || simNodes.length === 0) {
-            initSimulation();
-            return;
-        }
-        const simNode = simNodes.find((n) => n.id === nodeId);
-        if (simNode) {
-            simNode.fx = x;
-            simNode.fy = y;
-            simNode.x = x;
-            simNode.y = y;
-        }
-        if (simulation.alpha() < 0.1) {
-            simulation.alpha(0.15).restart();
-        }
-    }, [initSimulation]);
-
-    const releaseNode = useCallback((nodeId: string) => {
-        const simNode = simNodes.find((n) => n.id === nodeId);
-        if (simNode) {
-            simNode.fx = null;
-            simNode.fy = null;
-        }
-        if (simulation) simulation.alpha(RESTART_ALPHA).restart();
-        persistPositions(true);
-    }, [persistPositions]);
-
-    const addNodeToSimulation = useCallback((nodeId: string, x: number, y: number, label?: string) => {
-        simNodes.push({ id: nodeId, label, x, y, vx: 0, vy: 0 });
-        if (simulation) {
-            simulation.nodes(simNodes);
-            simulation.alpha(0.5).restart();
-        }
-    }, []);
-
-    const removeNodeFromSimulation = useCallback((nodeId: string) => {
-        simNodes = simNodes.filter((n) => n.id !== nodeId);
-        if (simulation) {
-            simulation.nodes(simNodes);
-            simulation.alpha(0.3).restart();
-        }
-    }, []);
-
-    const reheat = useCallback(() => {
-        const { physicsEnabled } = getStoreState();
-        if (!physicsEnabled) return;
-        if (simulation) simulation.alpha(1).restart();
-    }, [getStoreState]);
-
-    const stop = useCallback(() => {
-        if (simulation) simulation.stop();
-    }, []);
+    // === Callback de End - Persiste posições ===
 
     useEffect(() => {
-        if (rfInstance) {
-            setReactFlowInstance(rfInstance);
-        }
-        if (!simulation) {
-            const t = setTimeout(() => initSimulation(), 100);
-            return () => clearTimeout(t);
-        }
-    }, [initSimulation, rfInstance, setReactFlowInstance]);
+        simulationManager.setOnEnd(() => {
+            persistPositions(true);
+        });
+
+        return () => {
+            simulationManager.setOnEnd(null);
+        };
+    }, [persistPositions]);
+
+    // === Sincronização com o Store ===
 
     useEffect(() => {
         const unsubscribe = useGraphStore.subscribe((state, prevState) => {
+            // Mudança de physicsEnabled
             if (state.physicsEnabled !== prevState.physicsEnabled) {
-                if (!state.physicsEnabled && simulation) {
-                    simulation.stop();
+                if (state.physicsEnabled) {
+                    // Ligando a física
+                    if (simulationManager.isPaused()) {
+                        simulationManager.resume();
+                    } else {
+                        // Precisa iniciar nova simulação
+                        const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = state;
+                        simulationManager.start(nodes, edges, {
+                            repulsionStrength,
+                            linkDistance,
+                            collisionRadius,
+                        });
+                    }
+                } else {
+                    // Desligando a física
+                    simulationManager.pause();
                     persistPositions(true);
-                } else if (state.physicsEnabled) {
-                    initSimulation();
                 }
             }
 
-            if (state.nodes.length !== prevState.nodes.length) {
-                setTimeout(() => initSimulation(), 50);
+            // Mudança na quantidade de nós
+            if (state.nodes.length !== prevState.nodes.length && state.physicsEnabled) {
+                setTimeout(() => {
+                    const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+                    simulationManager.start(nodes, edges, {
+                        repulsionStrength,
+                        linkDistance,
+                        collisionRadius,
+                    });
+                }, 50);
             }
 
-            if (state.edges.length !== prevState.edges.length) {
-                setTimeout(() => initSimulation(), 50);
+            // Mudança na quantidade de edges
+            if (state.edges.length !== prevState.edges.length && state.physicsEnabled) {
+                setTimeout(() => {
+                    const { nodes, edges, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+                    simulationManager.start(nodes, edges, {
+                        repulsionStrength,
+                        linkDistance,
+                        collisionRadius,
+                    });
+                }, 50);
+            }
+
+            // Mudança nas configurações de física
+            if (
+                state.repulsionStrength !== prevState.repulsionStrength ||
+                state.linkDistance !== prevState.linkDistance ||
+                state.collisionRadius !== prevState.collisionRadius
+            ) {
+                simulationManager.updateConfig({
+                    repulsionStrength: state.repulsionStrength,
+                    linkDistance: state.linkDistance,
+                    collisionRadius: state.collisionRadius,
+                });
             }
         });
+
         return unsubscribe;
-    }, [getStoreState, initSimulation, persistPositions]);
+    }, [getStoreState, persistPositions]);
+
+    // === Inicialização ===
+
+    useEffect(() => {
+        const { nodes, edges, physicsEnabled, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+
+        if (physicsEnabled && nodes.length > 0 && simulationManager.isIdle()) {
+            // Pequeno delay para garantir que o React Flow está pronto
+            const timeout = setTimeout(() => {
+                simulationManager.start(nodes, edges, {
+                    repulsionStrength,
+                    linkDistance,
+                    collisionRadius,
+                });
+            }, 100);
+
+            return () => clearTimeout(timeout);
+        }
+    }, [getStoreState]);
+
+    // === Cleanup ===
 
     useEffect(() => {
         return () => {
-            if (persistTimeout) {
-                clearTimeout(persistTimeout);
+            if (persistTimeoutRef.current) {
+                clearTimeout(persistTimeoutRef.current);
             }
         };
     }, []);
 
+    // === API Pública ===
+
+    const initSimulation = useCallback(() => {
+        const { nodes, edges, physicsEnabled, repulsionStrength, linkDistance, collisionRadius } = getStoreState();
+        if (!physicsEnabled) return;
+
+        simulationManager.start(nodes, edges, {
+            repulsionStrength,
+            linkDistance,
+            collisionRadius,
+        });
+    }, [getStoreState]);
+
+    const updateNodeInSimulation = useCallback((nodeId: string, x: number, y: number) => {
+        simulationManager.updateNode(nodeId, x, y);
+    }, []);
+
+    const releaseNode = useCallback((nodeId: string) => {
+        simulationManager.releaseNode(nodeId);
+        persistPositions(true);
+    }, [persistPositions]);
+
+    const addNodeToSimulation = useCallback((nodeId: string, x: number, y: number, label?: string) => {
+        simulationManager.addNode(nodeId, x, y, label);
+    }, []);
+
+    const removeNodeFromSimulation = useCallback((nodeId: string) => {
+        simulationManager.removeNode(nodeId);
+    }, []);
+
+    const reheat = useCallback(() => {
+        simulationManager.reheat();
+    }, []);
+
+    const stop = useCallback(() => {
+        simulationManager.stop();
+    }, []);
+
+    const pause = useCallback(() => {
+        simulationManager.pause();
+        persistPositions(true);
+    }, [persistPositions]);
+
+    const resume = useCallback(() => {
+        simulationManager.resume();
+    }, []);
+
     return {
-        reheat,
+        // Ciclo de vida
+        initSimulation,
         stop,
+        pause,
+        resume,
+        reheat,
+
+        // Manipulação de nós
         updateNodeInSimulation,
         releaseNode,
         addNodeToSimulation,
         removeNodeFromSimulation,
-        initSimulation,
+
+        // Persistência
         persistPositions,
-        setReactFlowInstance,
+
+        // Estado
+        isRunning: simulationManager.isRunning.bind(simulationManager),
+        isPaused: simulationManager.isPaused.bind(simulationManager),
+        getState: simulationManager.getState.bind(simulationManager),
     };
 }

@@ -3,6 +3,7 @@
 import { memo, useState } from 'react';
 import { Handle, Position, Node, NodeProps } from '@xyflow/react';
 import { cn } from '@/lib/utils';
+import { NODE } from '@/lib/constants';
 
 // ============================================================================
 // GRAPH NODE - Visual representation of a knowledge node
@@ -21,33 +22,17 @@ type CustomNodeData = {
 
 type CustomNodeProps = NodeProps<Node<CustomNodeData>>;
 
-// Cores predefinidas para nós sem cor específica
-const DEFAULT_COLORS = [
-    '#6366f1', // indigo
-    '#8b5cf6', // violet
-    '#a855f7', // purple
-    '#ec4899', // pink
-    '#f43f5e', // rose
-    '#ef4444', // red
-    '#f97316', // orange
-    '#eab308', // yellow
-    '#22c55e', // green
-    '#14b8a6', // teal
-    '#06b6d4', // cyan
-    '#3b82f6', // blue
-];
-
 function getColorFromId(id: string): string {
     let hash = 0;
     for (let i = 0; i < id.length; i++) {
         hash = ((hash << 5) - hash) + id.charCodeAt(i);
         hash |= 0;
     }
-    return DEFAULT_COLORS[Math.abs(hash) % DEFAULT_COLORS.length];
+    return NODE.COLOR_PALETTE[Math.abs(hash) % NODE.COLOR_PALETTE.length];
 }
 
-// Tamanho do nó para cálculos de borda
-export const NODE_RADIUS = 35; // Raio do círculo (width/2)
+// Exporta o raio do nó para uso em outros componentes
+export const NODE_RADIUS = NODE.RADIUS;
 
 function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
     const [isHovered, setIsHovered] = useState(false);
