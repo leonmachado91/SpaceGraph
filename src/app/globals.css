@@ -439,3 +439,13 @@
   font-size: 0.875rem;
   text-align: center;
 }
+
+/* Remover outline/retângulo padrão do React Flow ao selecionar nós (usamos nosso próprio styling) */
+.react-flow__node-selection {
+  display: none !important;
+}
+
+.react-flow__node.selected {
+  box-shadow: none !important;
+  border: none !important;
+}

@@ -512,7 +512,12 @@ export const useGraphStore = create<GraphStore>()(
             toggleGrid: () => set((state) => ({ showGrid: !state.showGrid })),
 
             // === Interaction State ===
-            setSelectedNodeIds: (ids) => set({ selectedNodeIds: ids }),
+            setSelectedNodeIds: (ids) => set((state) => {
+                const sameSize = ids.size === state.selectedNodeIds.size;
+                const sameContent = sameSize && [...ids].every((id) => state.selectedNodeIds.has(id));
+                if (sameContent) return state;
+                return { selectedNodeIds: ids };
+            }),
 
             selectNode: (id, additive = false) => {
                 set((state) => {

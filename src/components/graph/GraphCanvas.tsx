@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -47,6 +47,7 @@ function GraphCanvasContent() {
     const [mounted, setMounted] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [tagManagerOpen, setTagManagerOpen] = useState(false);
+    const edgeClickRef = useRef(false);
 
     useEffect(() => {
         // Use setTimeout to avoid synchronous state update warning
@@ -106,7 +107,8 @@ function GraphCanvasContent() {
     const rfNodes = useMemo(() => toReactFlowNodes(nodes), [nodes]);
     const rfEdges = useMemo(() => toReactFlowEdges(edges), [edges]);
 
-    // Sincroniza nós/edges na instância do React Flow preservando posição/seleção atuais
+    // Sincroniza nós/edges na instância do React Flow preservando posição atuais
+    // NÃO sincronizamos `selected` aqui para evitar loop infinito com onSelectionChange
     useEffect(() => {
         const existing = reactFlow.getNodes();
         const map = new Map(existing.map((n) => [n.id, n]));
@@ -116,20 +118,22 @@ function GraphCanvasContent() {
                 return {
                     ...n,
                     position: prev?.position ?? n.position,
-                    selected: selectedNodeIds.has(n.id),
+                    selected: prev?.selected ?? false,
                 };
             })
         );
-    }, [rfNodes, reactFlow, selectedNodeIds]);
+    }, [rfNodes, reactFlow]);
 
     useEffect(() => {
+        const existing = reactFlow.getEdges();
+        const map = new Map(existing.map((e) => [e.id, e]));
         reactFlow.setEdges(
             rfEdges.map((e) => ({
                 ...e,
-                selected: selectedEdgeId === e.id,
+                selected: map.get(e.id)?.selected ?? false,
             }))
         );
-    }, [rfEdges, reactFlow, selectedEdgeId]);
+    }, [rfEdges, reactFlow]);
 
     // Handle node changes (position, selection, etc.)
     const onNodesChange = useCallback(
@@ -232,19 +236,43 @@ function GraphCanvasContent() {
         [currentSystemId, screenToFlowPosition, reheat, addNode, addEdge]
     );
 
+    // Apenas para cliques de edge (onSelectionChange ainda é chamado)
     const onSelectionChange = useCallback(
-        (params: { nodes: { id: string }[]; edges: { id: string }[] }) => {
-            const nodeIds = new Set(params.nodes.map((n) => n.id));
-            if (params.edges.length > 0) {
-                selectEdge(params.edges[0].id);
-                setSelectedNodeIds(new Set());
-            } else {
-                setSelectedNodeIds(nodeIds);
-                selectEdge(null);
+        (params: { nodes: { id: string }[]; edges?: { id: string }[] }) => {
+            const selectedEdges = params.edges ?? [];
+
+            // Clique de edge (permitir seleção isolada de edge)
+            if (edgeClickRef.current) {
+                edgeClickRef.current = false;
+                if (selectedEdges.length > 0) {
+                    selectEdge(selectedEdges[0].id);
+                    setSelectedNodeIds(new Set());
+                }
             }
+            // Não fazemos nada com nodes aqui - deixamos para onSelectionEnd
         },
         [selectEdge, setSelectedNodeIds]
     );
+
+    // Seleção aditiva: chamado apenas quando o retângulo de seleção TERMINA
+    const onSelectionEnd = useCallback(() => {
+        // Pega os nós atualmente selecionados no React Flow
+        const rfNodes = reactFlow.getNodes().filter((n) => n.selected);
+        const newNodeIds = rfNodes.map((n) => n.id);
+
+        if (newNodeIds.length === 0) return;
+
+        // Mescla com seleção existente do store
+        const { selectedNodeIds: currentSelectedNodeIds } = useGraphStore.getState();
+        const mergedSelection = new Set(currentSelectedNodeIds);
+        newNodeIds.forEach((id) => mergedSelection.add(id));
+
+        // Só atualiza se houve mudança
+        if (mergedSelection.size !== currentSelectedNodeIds.size) {
+            setSelectedNodeIds(mergedSelection);
+        }
+        selectEdge(null);
+    }, [reactFlow, selectEdge, setSelectedNodeIds]);
 
     // Double-click to create node - usa onDoubleClick dedicado
     const onPaneDoubleClick = useCallback(
@@ -438,6 +466,7 @@ function GraphCanvasContent() {
                     selectNode(node.id, additive);
                 }}
                 onEdgeClick={(_event, edge) => {
+                    edgeClickRef.current = true;
                     selectEdge(edge.id);
                     setSelectedNodeIds(new Set());
                 }}
@@ -446,6 +475,7 @@ function GraphCanvasContent() {
                 }}
                 onDoubleClick={onPaneDoubleClick}
                 onSelectionChange={onSelectionChange}
+                onSelectionEnd={onSelectionEnd}
                 fitView
                 className="bg-transparent!"
                 minZoom={0.1}
@@ -454,6 +484,8 @@ function GraphCanvasContent() {
                 nodesConnectable={true}
                 elementsSelectable={true}
                 edgesFocusable={true}
+                selectionOnDrag={true}
+                selectionKeyCode="Control"
                 selectNodesOnDrag={true}
                 deleteKeyCode={null}
             >
