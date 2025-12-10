@@ -8,8 +8,8 @@ import { TiptapEditor } from '@/components/editor';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
-// EDGE SIDEBAR - Painel flutuante de edição de edge
-// Usa EntitySidebar como base
+// EDGE SIDEBAR - Floating panel for editing an edge
+// Uses EntitySidebar as the base layout.
 // ============================================================================
 
 interface EdgeSidebarProps {
@@ -67,21 +67,21 @@ export function EdgeSidebar({ edgeId, onClose, onSelectNode }: EdgeSidebarProps)
             onColorChange={updateColor}
             onClose={onClose}
             onDelete={handleDelete}
-            titlePlaceholder="Nome da conexão..."
-            deleteButtonText="Excluir Conexão"
+            titlePlaceholder="Connection name..."
+            deleteButtonText="Delete connection"
         >
-            {/* Notas */}
-            <SidebarSection label="Notas">
+            {/* Notes */}
+            <SidebarSection label="Notes">
                 <TiptapEditor
                     content={edge.content ?? ''}
                     onChange={updateContent}
-                    placeholder="Adicione notas sobre esta conexão..."
+                    placeholder="Add notes about this connection..."
                     onNavigateToNode={onSelectNode}
                 />
             </SidebarSection>
 
-            {/* Estilo */}
-            <SidebarSection label="Estilo da Linha">
+            {/* Style */}
+            <SidebarSection label="Line style">
                 <div className="flex gap-2">
                     <button
                         onClick={() => updateStyle('solid')}
@@ -93,7 +93,7 @@ export function EdgeSidebar({ edgeId, onClose, onSelectNode }: EdgeSidebarProps)
                                 : "bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10"
                         )}
                     >
-                        ─── Sólida
+                        Solid
                     </button>
                     <button
                         onClick={() => updateStyle('dashed')}
@@ -105,13 +105,13 @@ export function EdgeSidebar({ edgeId, onClose, onSelectNode }: EdgeSidebarProps)
                                 : "bg-white/5 border-white/10 text-zinc-400 hover:bg-white/10"
                         )}
                     >
-                        - - - Tracejada
+                        Dashed
                     </button>
                 </div>
             </SidebarSection>
 
-            {/* Direção */}
-            <SidebarSection label="Direção">
+            {/* Direction */}
+            <SidebarSection label="Direction">
                 <button
                     onClick={invertDirection}
                     className={cn(
@@ -123,24 +123,24 @@ export function EdgeSidebar({ edgeId, onClose, onSelectNode }: EdgeSidebarProps)
                     )}
                 >
                     <ArrowLeftRight size={16} />
-                    <span>Inverter Direção</span>
+                    <span>Invert direction</span>
                 </button>
             </SidebarSection>
 
-            {/* Conexão */}
-            <SidebarSection label="Conexão">
+            {/* Connection */}
+            <SidebarSection label="Connection">
                 <div className="p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="text-zinc-500">De:</span>
+                        <span className="text-zinc-500">From:</span>
                         <span className="text-zinc-200 font-medium truncate flex-1">
-                            {sourceNode?.title || 'Desconhecido'}
+                            {sourceNode?.title || 'Unknown'}
                         </span>
                     </div>
-                    <div className="flex justify-center text-zinc-600">↓</div>
+                    <div className="flex justify-center text-zinc-600">-&gt;</div>
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="text-zinc-500">Para:</span>
+                        <span className="text-zinc-500">To:</span>
                         <span className="text-zinc-200 font-medium truncate flex-1">
-                            {targetNode?.title || 'Desconhecido'}
+                            {targetNode?.title || 'Unknown'}
                         </span>
                     </div>
                 </div>

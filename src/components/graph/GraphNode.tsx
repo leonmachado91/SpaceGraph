@@ -1,7 +1,7 @@
 'use client';
 
 import { memo, useState, useMemo } from 'react';
-import { Handle, Position, Node, NodeProps, useViewport, useReactFlow } from '@xyflow/react';
+import { Handle, Position, Node, NodeProps, useViewport } from '@xyflow/react';
 import { cn } from '@/lib/utils';
 import { NODE, ZOOM } from '@/lib/constants';
 import { useGraphStore, useDensityGenericFactor, useDensityMaxSize } from '@/lib/store/graphStore';
@@ -68,8 +68,6 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
     const degree = useMemo(() => {
         return storeEdges.filter(e => e.source === id || e.target === id).length;
     }, [storeEdges, id]);
-
-    const reactFlow = useReactFlow();
 
     // Estado local para hover (para performance)
     const [isHovered, setIsHovered] = useState(false);
@@ -158,48 +156,26 @@ function GraphNodeComponent({ id, data, selected }: CustomNodeProps) {
                     style={{ borderColor: isHovered || selected ? nodeColor : undefined }}
                     onClick={(e) => {
                         e.stopPropagation();
-                        // Quick Add: cria nó filho a +150px à direita
-                        // Busca estado atualizado diretamente da store para garantir consistência
-                        const { nodes: currentNodes, edges: currentEdges } = useGraphStore.getState();
-                        const currentNode = currentNodes.find(n => n.id === id);
+                        // Quick Add: cria nó filho a +150px à direita usando ações do store (inclui histórico)
+                        const { addNode, addEdge } = useGraphStore.getState();
+                        const currentNode = useGraphStore.getState().nodes.find(n => n.id === id);
                         if (!currentNode) return;
 
-                        const newNodeId = crypto.randomUUID();
-                        const newNode = {
-                            id: newNodeId,
+                        const newNodeId = addNode({
                             title: 'New Node',
-                            type: 'default' as const,
+                            type: 'default',
                             x: currentNode.x + 150,
                             y: currentNode.y,
                             color: '#6366f1',
                             systemId: currentNode.systemId,
-                        };
-                        const newEdge = {
-                            id: crypto.randomUUID(),
+                        });
+
+                        if (!newNodeId) return;
+
+                        addEdge({
                             source: id,
                             target: newNodeId,
                             systemId: currentNode.systemId,
-                        };
-
-                        // Atualiza Store
-                        useGraphStore.setState({
-                            nodes: [...currentNodes, newNode],
-                            edges: [...currentEdges, newEdge],
-                        });
-
-                        // Atualiza React Flow para que a física pegue o novo nó
-                        reactFlow.addNodes({
-                            id: newNodeId,
-                            position: { x: newNode.x, y: newNode.y },
-                            data: { title: newNode.title, color: newNode.color, tags: [] },
-                            type: 'orb',
-                        });
-
-                        // Adiciona edge no RF também para visualização imediata
-                        reactFlow.addEdges({
-                            id: newEdge.id,
-                            source: newEdge.source,
-                            target: newEdge.target,
                             type: 'default',
                         });
                     }}

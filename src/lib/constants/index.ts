@@ -1,17 +1,17 @@
 // ============================================================================
-// CONSTANTES DO NEOGRAPH
+// NEO GRAPH CONSTANTS
 // ============================================================================
-// Valores centralizados para facilitar manutenção e consistência.
+// Centralized values for easier maintenance and consistency.
 // ============================================================================
 
-// === Nós ===
+// === Nodes ===
 
 export const NODE = {
-    /** Raio visual do nó circular (metade do diâmetro) */
+    /** Visual radius (half diameter) */
     RADIUS: 35,
-    /** Cor padrão para nós sem cor definida */
+    /** Default color when none is set */
     DEFAULT_COLOR: '#6366f1', // indigo
-    /** Cores disponíveis para selection automática baseada em ID */
+    /** Palette used for automatic selection based on ID */
     COLOR_PALETTE: [
         '#6366f1', // indigo
         '#8b5cf6', // violet
@@ -31,105 +31,105 @@ export const NODE = {
 // === Edges ===
 
 export const EDGE = {
-    /** Cor padrão para edges sem cor definida */
+    /** Default color for edges */
     DEFAULT_COLOR: '#8b5cf6', // violet
-    /** Largura visual da linha */
+    /** Line width */
     STROKE_WIDTH: 2,
-    /** Largura do glow */
+    /** Glow width */
     GLOW_WIDTH: 12,
-    /** Largura da área clicável (hitbox) */
+    /** Clickable hitbox width */
     HITBOX_WIDTH: 40,
 } as const;
 
-// === Física D3 ===
+// === D3 Physics ===
 
 export const PHYSICS = {
-    /** Taxa de decaimento do alpha (energia) */
+    /** Alpha decay rate */
     ALPHA_DECAY: 0.02,
-    /** Decaimento de velocidade (amortecimento) */
+    /** Velocity decay (damping) */
     VELOCITY_DECAY: 0.2,
-    /** Alpha mínimo antes de parar a simulação */
+    /** Minimum alpha before stopping */
     ALPHA_MIN: 0.001,
-    /** Força de atração para o centro */
+    /** Attraction to center */
     CENTER_STRENGTH: 0.05,
-    /** Força de atração para os eixos X/Y */
+    /** Attraction to X/Y axis */
     AXIS_STRENGTH: 0.02,
-    /** Força de repulsão padrão entre nós */
+    /** Default repulsion between nodes */
     REPULSION_DEFAULT: -300,
-    /** Distância padrão de links */
+    /** Default link distance */
     LINK_DISTANCE_DEFAULT: 100,
-    /** Raio de colisão padrão */
+    /** Default collision radius */
     COLLISION_RADIUS_DEFAULT: 40,
-    /** Intervalo mínimo entre ticks (em ms) para throttling */
+    /** Min interval between ticks (ms) for throttling */
     TICK_THROTTLE_MS: 16, // ~60fps
-    /** Debounce para persistir posições (em ms) */
+    /** Debounce to persist positions (ms) */
     PERSIST_DEBOUNCE_MS: 800,
-    /** Alpha ao reiniciar simulação após mudança */
+    /** Alpha when restarting simulation after change */
     RESTART_ALPHA: 0.3,
-    /** Fator de crescimento visual do raio do nó por conexão */
+    /** Visual growth factor per connection */
     DENSITY_GENERIC_FACTOR: 15,
-    /** Tamanho visual máximo do nó (em pixels) */
+    /** Maximum visual size (pixels) */
     DENSITY_MAX_SIZE: 800,
-    /** Fator de aumento da força de repulsão por conexão (0.2 = +20%) */
+    /** Repulsion increase factor per connection (0.2 = +20%) */
     DENSITY_CHARGE_FACTOR: 0.2,
 } as const;
 
 // === UI ===
 
 export const UI = {
-    /** Z-index do toolbar flutuante */
+    /** Floating toolbar z-index */
     TOOLBAR_Z_INDEX: 50,
-    /** Z-index da sidebar */
+    /** Sidebar z-index */
     SIDEBAR_Z_INDEX: 40,
-    /** Z-index do modal/overlay */
+    /** Modal/overlay z-index */
     MODAL_Z_INDEX: 60,
-    /** Largura padrão da sidebar */
+    /** Default sidebar width */
     SIDEBAR_WIDTH: 340,
-    /** Duração de animações em ms */
+    /** Animation duration in ms */
     ANIMATION_DURATION: 200,
-    /** Debounce para salvar edições de texto */
+    /** Debounce for saving text edits */
     SAVE_DEBOUNCE_MS: 1000,
 } as const;
 
-// === Histórico ===
+// === History ===
 
 export const HISTORY = {
-    /** Número máximo de snapshots no histórico de undo */
+    /** Max undo snapshots */
     MAX_SNAPSHOTS: 50,
 } as const;
 
 // === Zoom ===
 
 export const ZOOM = {
-    /** Zoom mínimo permitido */
+    /** Minimum zoom */
     MIN: 0.1,
-    /** Zoom máximo permitido */
+    /** Maximum zoom */
     MAX: 4,
-    /** Threshold para Galaxy View (apenas pontos) */
+    /** Threshold for galaxy view (dots only) */
     GALAXY_THRESHOLD: 0.5,
-    /** Threshold para Detail View (tags, quick add) */
+    /** Threshold for detail view (tags, quick add) */
     DETAIL_THRESHOLD: 1.2,
-    /** LOD: Threshold abaixo do qual mostra apenas ponto colorido */
+    /** LOD: below this shows dot only */
     LOD_FAR_THRESHOLD: 0.4,
-    /** LOD: Threshold acima do qual mostra nomes das tags */
+    /** LOD: above this shows tag names */
     LOD_CLOSE_THRESHOLD: 1.0,
 } as const;
 
-// === Cores do Tema ===
+// === Theme colors ===
 
 export const THEME = {
-    /** Cor de fundo do canvas (centro do gradiente) */
+    /** Canvas background (gradient center) */
     CANVAS_BG_CENTER: '#1a1a2e',
-    /** Cor de fundo do canvas (borda do gradiente) */
+    /** Canvas background (gradient edge) */
     CANVAS_BG_EDGE: '#0a0a0f',
-    /** Cor de texto primário */
+    /** Primary text color */
     TEXT_PRIMARY: '#f4f4f5', // zinc-100
-    /** Cor de texto secundário */
+    /** Secondary text color */
     TEXT_SECONDARY: '#a1a1aa', // zinc-400
-    /** Cor de seleção/foco */
+    /** Selection/focus color */
     SELECTION_COLOR: '#8b5cf6', // violet-500
-    /** Cor de ação/link */
+    /** Action/link color */
     ACTION_COLOR: '#3b82f6', // blue-500
-    /** Cor de perigo/erro */
+    /** Danger/error color */
     DANGER_COLOR: '#f43f5e', // rose-500
 } as const;

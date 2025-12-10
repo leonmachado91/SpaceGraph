@@ -59,6 +59,8 @@ function GraphCanvasContent() {
     const showGrid = useShowGrid();
     const highlightedNodeIds = useGraphStore((s) => s.highlightedNodeIds);
     const selectedNodeIds = useGraphStore((s) => s.selectedNodeIds);
+    const selectedNodeId = selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] : null;
+    const selectedEdgeId = useGraphStore((s) => s.selectedEdgeId);
     const {
         addNode,
         addEdge,
@@ -69,11 +71,7 @@ function GraphCanvasContent() {
         clearSelection,
         selectEdge,
         setSelectedNodeIds,
-        selectedEdgeId
     } = useGraphStore();
-
-    // Derived Selection State (Derived from Store)
-    const selectedNodeId = selectedNodeIds.size === 1 ? Array.from(selectedNodeIds)[0] : null;
 
     // Load initial data
     const { isLoading, isError } = useLoadGraph(mounted ? SYSTEM_ID : '');
@@ -115,21 +113,23 @@ function GraphCanvasContent() {
         reactFlow.setNodes(
             rfNodes.map((n) => {
                 const prev = map.get(n.id);
-                return prev ? { ...n, position: prev.position, selected: prev.selected } : n;
+                return {
+                    ...n,
+                    position: prev?.position ?? n.position,
+                    selected: selectedNodeIds.has(n.id),
+                };
             })
         );
-    }, [rfNodes, reactFlow]);
+    }, [rfNodes, reactFlow, selectedNodeIds]);
 
     useEffect(() => {
-        const existing = reactFlow.getEdges();
-        const map = new Map(existing.map((e) => [e.id, e]));
         reactFlow.setEdges(
-            rfEdges.map((e) => {
-                const prev = map.get(e.id);
-                return prev ? { ...e, selected: prev.selected } : e;
-            })
+            rfEdges.map((e) => ({
+                ...e,
+                selected: selectedEdgeId === e.id,
+            }))
         );
-    }, [rfEdges, reactFlow]);
+    }, [rfEdges, reactFlow, selectedEdgeId]);
 
     // Handle node changes (position, selection, etc.)
     const onNodesChange = useCallback(
@@ -148,22 +148,13 @@ function GraphCanvasContent() {
                     }
                 }
 
-                // Handle selection changes
-                if (change.type === 'select' && change.id) {
-                    if (change.selected) {
-                        selectNode(change.id, false);
-                    } else {
-                        clearSelection();
-                    }
-                }
-
                 // Handle removal
                 if (change.type === 'remove' && change.id) {
                     deleteNode(change.id);
                 }
             });
         },
-        [deleteNode, setIsDragging, updateNodeInSimulation, releaseNode, selectNode, clearSelection]
+        [deleteNode, setIsDragging, updateNodeInSimulation, releaseNode]
     );
 
     // Handle edge changes
@@ -201,8 +192,11 @@ function GraphCanvasContent() {
         (event: MouseEvent | TouchEvent, connectionState: any) => {
             const fromNode = connectionState.fromNode;
             const fromHandle = connectionState.fromHandle;
+            const toNode = connectionState.toNode;
+            const toHandle = connectionState.toHandle;
 
-            if (!fromNode || !fromHandle) return;
+            // Se já conectou em um alvo válido, não faz quick-add
+            if (!fromNode || !fromHandle || toNode || toHandle) return;
 
             // Pega posição do mouse/touch
             const clientX = 'touches' in event ? event.changedTouches[0].clientX : event.clientX;
@@ -218,55 +212,38 @@ function GraphCanvasContent() {
             // Cria novo nó na posição do drop
             const position = screenToFlowPosition({ x: clientX, y: clientY });
 
-            // Gera ID antes para poder usar na edge
-            const newNodeId = crypto.randomUUID();
+            const newNodeData = createGraphNode(position.x, position.y, currentSystemId);
+            const newNodeId = addNode(newNodeData);
 
-            // Adiciona o nó diretamente ao store
-            const { nodes: currentNodes, edges: currentEdges } = useGraphStore.getState();
-            const newNode = {
-                id: newNodeId,
-                title: 'New Node',
-                type: 'default' as const,
-                x: position.x,
-                y: position.y,
-                color: '#6366f1',
-                systemId: currentSystemId,
-            };
+            if (!newNodeId) return;
 
             // Determina direção baseado no tipo de handle
             const isSource = fromHandle.type === 'source';
-            const newEdge = {
-                id: crypto.randomUUID(),
+            addEdge({
                 source: isSource ? fromNode.id : newNodeId,
                 target: isSource ? newNodeId : fromNode.id,
                 systemId: currentSystemId,
-            };
-
-            // Atualiza store com nó + edge em uma única operação
-            useGraphStore.setState({
-                nodes: [...currentNodes, newNode],
-                edges: [...currentEdges, newEdge],
-            });
-
-            // Sincroniza com React Flow para física imediata
-            reactFlow.addNodes({
-                id: newNodeId,
-                position: { x: newNode.x, y: newNode.y },
-                data: { title: newNode.title, color: newNode.color, tags: [] },
-                type: 'orb',
-            });
-            reactFlow.addEdges({
-                id: newEdge.id,
-                source: newEdge.source,
-                target: newEdge.target,
                 type: 'default',
-                style: { stroke: '#8b5cf6', strokeWidth: 2 },
             });
 
             // Reheat physics
             setTimeout(() => reheat(), 100);
         },
-        [currentSystemId, screenToFlowPosition, reheat, reactFlow]
+        [currentSystemId, screenToFlowPosition, reheat, addNode, addEdge]
+    );
+
+    const onSelectionChange = useCallback(
+        (params: { nodes: { id: string }[]; edges: { id: string }[] }) => {
+            const nodeIds = new Set(params.nodes.map((n) => n.id));
+            if (params.edges.length > 0) {
+                selectEdge(params.edges[0].id);
+                setSelectedNodeIds(new Set());
+            } else {
+                setSelectedNodeIds(nodeIds);
+                selectEdge(null);
+            }
+        },
+        [selectEdge, setSelectedNodeIds]
     );
 
     // Double-click to create node - usa onDoubleClick dedicado
@@ -300,33 +277,81 @@ function GraphCanvasContent() {
         [screenToFlowPosition, currentSystemId, addNode, reheat, reactFlow]
     );
 
-    // Delete selected nodes on Delete key (não Backspace, para evitar conflito com edição)
+    // Delete selected nodes/edges, duplicate selected nodes (Ctrl/Cmd + D)
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            // Apenas Delete, não Backspace (backspace usado para edição de texto)
+            const target = event.target as HTMLElement;
+
+            // Ignora se estiver em input, textarea ou contenteditable
+            if (
+                target.tagName === 'INPUT' ||
+                target.tagName === 'TEXTAREA' ||
+                target.isContentEditable ||
+                target.closest('[contenteditable="true"]')
+            ) {
+                return;
+            }
+
+            // Delete
             if (event.key === 'Delete') {
-                const target = event.target as HTMLElement;
-
-                // Ignora se estiver em input, textarea ou contenteditable
-                if (
-                    target.tagName === 'INPUT' ||
-                    target.tagName === 'TEXTAREA' ||
-                    target.isContentEditable ||
-                    target.closest('[contenteditable="true"]')
-                ) {
-                    return;
+                const { selectedNodeIds: currentSelectedNodeIds } = useGraphStore.getState();
+                if (currentSelectedNodeIds.size > 0) {
+                    currentSelectedNodeIds.forEach((id) => deleteNode(id));
+                } else {
+                    const { selectedEdgeId: currentSelectedEdgeId } = useGraphStore.getState();
+                    if (currentSelectedEdgeId) {
+                        useGraphStore.getState().deleteEdge(currentSelectedEdgeId);
+                    }
                 }
+            }
 
-                const { selectedNodeIds } = useGraphStore.getState();
-                if (selectedNodeIds.size > 0) {
-                    selectedNodeIds.forEach((id) => deleteNode(id));
-                }
+            // Duplicate (Ctrl/Cmd + D)
+            if ((event.ctrlKey || event.metaKey) && (event.key === 'd' || event.key === 'D')) {
+                event.preventDefault();
+                const state = useGraphStore.getState();
+                const selectedNodes = state.nodes.filter((n) => state.selectedNodeIds.has(n.id));
+                if (selectedNodes.length === 0) return;
+
+                const idMap = new Map<string, string>();
+                selectedNodes.forEach((node) => {
+                    const rest = { ...node };
+                    delete (rest as Partial<typeof node>).id;
+                    const newId = state.addNode({
+                        ...rest,
+                        x: node.x + 50,
+                        y: node.y + 50,
+                    });
+                    if (newId) {
+                        idMap.set(node.id, newId);
+                    }
+                });
+
+                // Replica edges internas entre nós duplicados
+                state.edges
+                    .filter((edge) => state.selectedNodeIds.has(edge.source) && state.selectedNodeIds.has(edge.target))
+                    .forEach((edge) => {
+                        const newSource = idMap.get(edge.source);
+                        const newTarget = idMap.get(edge.target);
+                        if (!newSource || !newTarget) return;
+                        const rest = { ...edge };
+                        delete (rest as Partial<typeof edge>).id;
+                        delete (rest as Partial<typeof edge>).source;
+                        delete (rest as Partial<typeof edge>).target;
+                        state.addEdge({
+                            ...(rest as Omit<typeof edge, 'id' | 'source' | 'target'>),
+                            source: newSource,
+                            target: newTarget,
+                        });
+                    });
+
+                state.setSelectedNodeIds(new Set(idMap.values()));
+                setTimeout(() => reheat(), 100);
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [deleteNode]);
+    }, [deleteNode, reheat]);
 
     // Not mounted yet
     if (!mounted) {
@@ -409,15 +434,18 @@ function GraphCanvasContent() {
                 connectionMode={ConnectionMode.Loose}
                 connectionRadius={50}
                 onNodeClick={(_event, node) => {
-                    selectNode(node.id, false);
+                    const additive = _event.metaKey || _event.ctrlKey || _event.shiftKey;
+                    selectNode(node.id, additive);
                 }}
                 onEdgeClick={(_event, edge) => {
                     selectEdge(edge.id);
+                    setSelectedNodeIds(new Set());
                 }}
                 onPaneClick={() => {
                     clearSelection();
                 }}
                 onDoubleClick={onPaneDoubleClick}
+                onSelectionChange={onSelectionChange}
                 fitView
                 className="bg-transparent!"
                 minZoom={0.1}
@@ -426,7 +454,7 @@ function GraphCanvasContent() {
                 nodesConnectable={true}
                 elementsSelectable={true}
                 edgesFocusable={true}
-                selectNodesOnDrag={false}
+                selectNodesOnDrag={true}
                 deleteKeyCode={null}
             >
                 {showGrid && <Background color="#333" gap={20} size={1} />}

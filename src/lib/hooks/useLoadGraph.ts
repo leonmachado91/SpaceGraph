@@ -4,28 +4,36 @@ import { MockGraphService } from '@/lib/services/MockGraphService';
 import { useGraphStore } from '@/lib/store/graphStore';
 
 // ============================================================================
-// LOAD GRAPH HOOK - Carrega dados do serviço e popula o store
+// LOAD GRAPH HOOK - Fetches data from the service and hydrates the store
 // ============================================================================
 
-// Instância singleton do serviço Mock
+// Singleton mock service
 const graphService = new MockGraphService();
 
 export function useLoadGraph(systemId: string) {
     const { setNodes, setEdges } = useGraphStore();
+
+    // Avoid overwriting data restored from localStorage
+    const initialState = useGraphStore.getState();
+    const hasLocalData = initialState.nodes.length > 0 || initialState.edges.length > 0;
 
     const query = useQuery({
         queryKey: ['graph', systemId],
         queryFn: () => graphService.getGraph(systemId),
         staleTime: 5 * 60 * 1000, // 5 minutos
         refetchOnWindowFocus: false,
-        enabled: !!systemId, // Só executa se systemId não for vazio
+        enabled: !!systemId && !hasLocalData, // only fetch if we have no local data
     });
 
-    // Quando dados chegam, popula o store
+    // When data arrives, populate the store if nothing is persisted
     useEffect(() => {
         if (query.data) {
-            setNodes(query.data.nodes);
-            setEdges(query.data.edges);
+            const state = useGraphStore.getState();
+            const alreadyHasData = state.nodes.length > 0 || state.edges.length > 0;
+            if (!alreadyHasData) {
+                setNodes(query.data.nodes);
+                setEdges(query.data.edges);
+            }
         }
     }, [query.data, setNodes, setEdges]);
 

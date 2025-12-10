@@ -5,8 +5,7 @@ import { useGraphStore } from '@/lib/store/graphStore';
 import { extractWikiLinksFromHtml } from '@/lib/hooks/useWikiLinkSync';
 
 // ============================================================================
-// CONNECTIONS LIST - Lista de conexões (edges) de um nó
-// Mostra conexões de entrada e saída, permite inserir WikiLinks no texto
+// CONNECTIONS LIST - Shows incoming/outgoing connections for a node
 // ============================================================================
 
 interface ConnectionsListProps {
@@ -21,35 +20,32 @@ export function ConnectionsList({ nodeId, nodeContent, onInsertWikiLink }: Conne
 
     const connections = getNodeConnections(nodeId);
 
-    // Extrai WikiLinks já presentes no texto
+    // WikiLinks already present in the text
     const existingWikiLinks = extractWikiLinksFromHtml(nodeContent);
 
-    // Helper para obter título do nó
     const getNodeTitle = (id: string) => {
         const node = nodes.find(n => n.id === id);
-        return node?.title ?? 'Nó não encontrado';
+        return node?.title ?? 'Node not found';
     };
 
-    // Verifica se WikiLink já existe no texto
     const hasWikiLink = (targetId: string) => existingWikiLinks.includes(targetId);
 
-    // Sem conexões
     if (connections.all.length === 0) {
         return (
             <div className="text-xs text-zinc-500 italic py-2">
-                Nenhuma conexão
+                No connections
             </div>
         );
     }
 
     return (
         <div className="space-y-3">
-            {/* Conexões de Saída (este nó → outros) */}
+            {/* Outgoing connections */}
             {connections.outgoing.length > 0 && (
                 <div className="space-y-1">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                         <ArrowRight size={10} />
-                        Saída
+                        Outgoing
                     </div>
                     <div className="space-y-1">
                         {connections.outgoing.map((edge) => (
@@ -65,12 +61,12 @@ export function ConnectionsList({ nodeId, nodeContent, onInsertWikiLink }: Conne
                 </div>
             )}
 
-            {/* Conexões de Entrada (outros → este nó) */}
+            {/* Incoming connections */}
             {connections.incoming.length > 0 && (
                 <div className="space-y-1">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-wider flex items-center gap-1">
                         <ArrowLeft size={10} />
-                        Entrada
+                        Incoming
                     </div>
                     <div className="space-y-1">
                         {connections.incoming.map((edge) => (
@@ -90,7 +86,7 @@ export function ConnectionsList({ nodeId, nodeContent, onInsertWikiLink }: Conne
 }
 
 // ============================================================================
-// CONNECTION ITEM - Item individual de conexão
+// CONNECTION ITEM
 // ============================================================================
 
 interface ConnectionItemProps {
@@ -110,13 +106,13 @@ function ConnectionItem({ targetId, title, hasWikiLink, onInsert }: ConnectionIt
 
             {hasWikiLink ? (
                 <span className="text-[10px] text-emerald-400 shrink-0">
-                    ✓ no texto
+                    In text
                 </span>
             ) : (
                 <button
                     onClick={() => onInsert?.(targetId, title)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-violet-500/20"
-                    title={`Inserir [[${title}]] no texto`}
+                    title={`Insert [[${title}]] into text`}
                 >
                     <Plus size={12} className="text-violet-400" />
                 </button>

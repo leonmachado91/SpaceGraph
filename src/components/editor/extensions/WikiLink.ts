@@ -4,6 +4,8 @@ import Suggestion from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
 import type { SuggestionOptions } from '@tiptap/suggestion';
 import { WikiLinkNodeView } from './WikiLinkNodeView';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import type { EditorState, Transaction } from '@tiptap/pm/state';
 
 // ============================================================================
 // WIKILINK EXTENSION - Links internos estilo [[Node Name]]
@@ -91,7 +93,7 @@ export const WikiLink = Node.create<WikiLinkOptions>({
         ];
     },
 
-    renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: any }) {
+    renderHTML({ node, HTMLAttributes }: { node: ProseMirrorNode; HTMLAttributes: Record<string, unknown> }) {
         const isGhost = node.attrs.isGhost;
         // Fallback para quando não há NodeView (SSR, export, etc)
         return [
@@ -117,14 +119,14 @@ export const WikiLink = Node.create<WikiLinkOptions>({
     addKeyboardShortcuts() {
         return {
             Backspace: () =>
-                this.editor.commands.command(({ tr, state }: { tr: { insertText: (text: string, from: number, to: number) => void }; state: { selection: { empty: boolean; anchor: number }; doc: { nodesBetween: (from: number, to: number, callback: (node: { type: { name: string }; nodeSize: number }, pos: number) => boolean | void) => void } } }) => {
+                this.editor.commands.command(({ tr, state }: { tr: Transaction; state: EditorState }) => {
                     let isWikiLink = false;
                     const { selection } = state;
                     const { empty, anchor } = selection;
 
                     if (!empty) return false;
 
-                    state.doc.nodesBetween(anchor - 1, anchor, (node: { type: { name: string }; nodeSize: number }, pos: number) => {
+                    state.doc.nodesBetween(anchor - 1, anchor, (node: ProseMirrorNode, pos: number) => {
                         if (node.type.name === this.name) {
                             isWikiLink = true;
                             tr.insertText('', pos, pos + node.nodeSize);

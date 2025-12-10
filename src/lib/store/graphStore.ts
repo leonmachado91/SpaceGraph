@@ -111,7 +111,6 @@ interface GraphActions {
     toggleGrid: () => void;
 
     // === Interaction State ===
-    // === Interaction State ===
     setSelectedNodeIds: (ids: Set<string>) => void;
     selectNode: (id: string, additive?: boolean) => void;
     selectEdge: (id: string | null) => void;
@@ -133,7 +132,7 @@ type GraphStore = GraphState & GraphActions;
 const HISTORY_LIMIT = 50;
 
 // Estado inicial
-const initialState: Omit<GraphState, 'selectedNodeIds'> & { selectedNodeIds: Set<string> } = {
+const initialState: GraphState = {
     nodes: [],
     edges: [],
     superTags: [],
@@ -517,8 +516,6 @@ export const useGraphStore = create<GraphStore>()(
 
             selectNode: (id, additive = false) => {
                 set((state) => {
-                    const updates: Partial<GraphState> = { selectedEdgeId: null }; // Sempre limpa edge ao selecionar node
-
                     if (additive) {
                         const newSelection = new Set(state.selectedNodeIds);
                         if (newSelection.has(id)) {
@@ -526,19 +523,17 @@ export const useGraphStore = create<GraphStore>()(
                         } else {
                             newSelection.add(id);
                         }
-                        updates.selectedNodeIds = newSelection;
-                    } else {
-                        updates.selectedNodeIds = new Set([id]);
+                        return { selectedNodeIds: newSelection, selectedEdgeId: null };
                     }
-                    return updates;
+                    return { selectedNodeIds: new Set([id]), selectedEdgeId: null };
                 });
             },
 
             selectEdge: (id) => {
-                set({
+                set((state) => ({
                     selectedEdgeId: id,
-                    selectedNodeIds: new Set(), // Sempre limpa nodes ao selecionar edge
-                });
+                    selectedNodeIds: id ? new Set() : state.selectedNodeIds,
+                }));
             },
 
             clearSelection: () => set({ selectedNodeIds: new Set(), selectedEdgeId: null }),
@@ -564,12 +559,9 @@ export const useGraphStore = create<GraphStore>()(
             clearSearch: () => set({ searchQuery: '', highlightedNodeIds: [] }),
 
             navigateToFirstResult: () => {
-                // Esta função será chamada pelo componente que tem acesso ao ReactFlow
-                // O store apenas armazena os IDs, a navegação real é feita no componente
                 const { highlightedNodeIds } = get();
                 if (highlightedNodeIds.length > 0) {
-                    // Seleciona o primeiro resultado para facilitar navegação
-                    set({ selectedNodeIds: new Set([highlightedNodeIds[0]]) });
+                    set({ selectedNodeIds: new Set([highlightedNodeIds[0]]), selectedEdgeId: null });
                 }
             },
 
@@ -578,7 +570,7 @@ export const useGraphStore = create<GraphStore>()(
 
             reset: () => set({
                 ...initialState,
-                selectedNodeIds: new Set(), // Recria o Set
+                selectedNodeIds: new Set(),
             }),
         }),
         {
@@ -600,7 +592,6 @@ export const useGraphStore = create<GraphStore>()(
                 densityMaxSize: state.densityMaxSize,
                 showGrid: state.showGrid,
             }),
-            // Desserializa o Set corretamente ao carregar
             onRehydrateStorage: () => (state) => {
                 if (state) {
                     state.selectedNodeIds = new Set();

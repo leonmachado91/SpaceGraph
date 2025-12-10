@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useImperativeHandle, useState, useCallback, useLayoutEffect } from 'react';
+import { forwardRef, useImperativeHandle, useState, useCallback, useMemo } from 'react';
 import { Plus } from 'lucide-react';
 
 // ============================================================================
@@ -26,18 +26,24 @@ export const WikiLinkSuggestionList = forwardRef<
     const [selectedIndex, setSelectedIndex] = useState(0);
 
     // Adiciona opção de criar nó se query não existe
-    const hasExactMatch = props.items.some(
-        (item) => item.title.toLowerCase() === (props.query ?? '').toLowerCase()
-    );
+    const allItems: WikiLinkItem[] = useMemo(() => {
+        const hasExactMatch = props.items.some(
+            (item) => item.title.toLowerCase() === (props.query ?? '').toLowerCase()
+        );
 
-    const allItems: WikiLinkItem[] = [
-        ...props.items,
-        // Adiciona opção de criar se não há match exato e query não está vazia
-        ...(!hasExactMatch && props.query?.trim()
-            ? [{ id: `ghost-${props.query}`, title: props.query.trim(), isGhost: true }]
-            : []
-        ),
-    ];
+        return [
+            ...props.items,
+            ...(!hasExactMatch && props.query?.trim()
+                ? [{ id: `ghost-${props.query}`, title: props.query.trim(), isGhost: true }]
+                : []
+            ),
+        ];
+    }, [props.items, props.query]);
+
+    const safeSelectedIndex = useMemo(() => {
+        if (allItems.length === 0) return 0;
+        return Math.min(selectedIndex, allItems.length - 1);
+    }, [allItems.length, selectedIndex]);
 
     const selectItem = useCallback(
         (index: number) => {
@@ -50,24 +56,22 @@ export const WikiLinkSuggestionList = forwardRef<
     );
 
     const upHandler = useCallback(() => {
+        if (!allItems.length) return;
         setSelectedIndex((prev) =>
             (prev + allItems.length - 1) % allItems.length
         );
     }, [allItems.length]);
 
     const downHandler = useCallback(() => {
+        if (!allItems.length) return;
         setSelectedIndex((prev) =>
             (prev + 1) % allItems.length
         );
     }, [allItems.length]);
 
     const enterHandler = useCallback(() => {
-        selectItem(selectedIndex);
-    }, [selectItem, selectedIndex]);
-
-    useLayoutEffect(() => {
-        setSelectedIndex(0);
-    }, [props.items]);
+        selectItem(safeSelectedIndex);
+    }, [selectItem, safeSelectedIndex]);
 
     useImperativeHandle(ref, () => ({
         onKeyDown: (event: KeyboardEvent) => {
@@ -103,7 +107,7 @@ export const WikiLinkSuggestionList = forwardRef<
                 <button
                     key={item.id}
                     onClick={() => selectItem(index)}
-                    className={`wiki-link-suggestion-item ${index === selectedIndex ? 'is-selected' : ''
+                    className={`wiki-link-suggestion-item ${index === safeSelectedIndex ? 'is-selected' : ''
                         } ${item.isGhost ? 'is-ghost' : ''}`}
                     title={item.isGhost ? `Criar "${item.title}"` : item.title}
                 >
@@ -129,7 +133,6 @@ import type { SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion
 
 export function createSuggestionConfig(
     getNodes: () => { id: string; title: string }[],
-    onWikiLinkInserted?: (sourceNodeId: string | null, targetNodeId: string, isGhost: boolean) => void
 ) {
     return {
         items: ({ query }: { query: string }): WikiLinkItem[] => {
